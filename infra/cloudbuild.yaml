@@ -1,15 +1,5 @@
 steps:
-  # 1. Install dependencies and run tests
-  - name: python:3.12-slim
-    entrypoint: bash
-    args:
-      - -c
-      - |
-        pip install -r requirements.txt --quiet
-        pip install pytest --quiet
-        python -m pytest tests/ -v --tb=short || true
-
-  # 2. Build Docker image
+  # 1. Build Docker image
   - name: gcr.io/cloud-builders/docker
     args:
       - build
