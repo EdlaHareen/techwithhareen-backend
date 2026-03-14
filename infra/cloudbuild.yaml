@@ -33,10 +33,11 @@ substitutions:
   _REGION: us-central1
   _APP_NAME: insta-handler
 
+timeout: 1200s  # 20 min — docker build with large deps can be slow
+
 options:
   logging: GCS_ONLY
   machineType: E2_HIGHCPU_8
-  timeout: 1200s  # 20 min — pip install with google-adk can be slow
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP_NAME}/app:$COMMIT_SHA
