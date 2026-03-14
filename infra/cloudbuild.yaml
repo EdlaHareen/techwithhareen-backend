@@ -1,8 +1,16 @@
 steps:
-  # 1. Build Docker image
+  # 1. Pull previous image for layer cache (best-effort)
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP_NAME}/app:latest || true
+
+  # 2. Build Docker image (reuse cached layers from previous build)
   - name: gcr.io/cloud-builders/docker
     args:
       - build
+      - --cache-from=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP_NAME}/app:latest
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP_NAME}/app:$COMMIT_SHA
       - -t
