@@ -124,8 +124,15 @@ async def send_post_for_approval(
 
     try:
         if slide_urls:
-            # Send slides as a media group (album)
-            media = [InputMediaPhoto(media=url) for url in slide_urls[:10]]  # Telegram max 10
+            from aiogram.types import FSInputFile, BufferedInputFile
+            media = []
+            for url in slide_urls[:10]:
+                if url.startswith("file://"):
+                    # Local file — send bytes directly
+                    path = url[len("file://"):]
+                    media.append(InputMediaPhoto(media=FSInputFile(path)))
+                else:
+                    media.append(InputMediaPhoto(media=url))
             await bot.send_media_group(chat_id=chat_id, media=media)
 
         # Send caption + keyboard as separate message
@@ -171,15 +178,26 @@ async def send_failure_alert(
 
 async def register_webhook() -> None:
     """Register Telegram webhook on service startup."""
+    import asyncio
+    from aiogram.exceptions import TelegramRetryAfter
+
     service_url = os.environ.get("SERVICE_URL", "")
     if not service_url:
         logger.warning("SERVICE_URL not set — skipping webhook registration (OK for local dev)")
         return
 
     webhook_url = f"{service_url}/telegram/webhook"
-    await bot.set_webhook(
-        url=webhook_url,
-        secret_token=_webhook_secret or None,
-        drop_pending_updates=True,
-    )
-    logger.info(f"Telegram webhook registered: {webhook_url}")
+    for attempt in range(5):
+        try:
+            await bot.set_webhook(
+                url=webhook_url,
+                secret_token=_webhook_secret or None,
+                drop_pending_updates=True,
+            )
+            logger.info(f"Telegram webhook registered: {webhook_url}")
+            return
+        except TelegramRetryAfter as e:
+            wait = e.retry_after + 1
+            logger.warning(f"Telegram flood control on SetWebhook, waiting {wait}s (attempt {attempt+1})")
+            await asyncio.sleep(wait)
+    logger.error("Failed to register Telegram webhook after 5 attempts")

@@ -27,19 +27,33 @@ RUNDOWNAI_SENDER = "newsletter@rundownai.com"
 def get_gmail_service():
     """Build an authenticated Gmail API service using OAuth2 credentials."""
     creds = None
-    token_path = os.environ.get("GMAIL_TOKEN_PATH", "token.pickle")
+    # GMAIL_TOKEN_PATH is always writable (/tmp/token.pickle in Cloud Run)
+    token_path = os.environ.get("GMAIL_TOKEN_PATH", "/tmp/token.pickle")
     credentials_path = os.environ.get("GMAIL_CREDENTIALS_PATH", "credentials.json")
 
     if os.path.exists(token_path):
         with open(token_path, "rb") as f:
             creds = pickle.load(f)
+    else:
+        # Cloud Run: GMAIL_TOKEN_B64 env var holds the base64-encoded token.pickle
+        # (injected from Secret Manager). Decode it to /tmp on first use.
+        token_b64 = os.environ.get("GMAIL_TOKEN_B64", "")
+        if token_b64:
+            raw = base64.b64decode(token_b64)
+            with open(token_path, "wb") as f:
+                f.write(raw)
+            with open(token_path, "rb") as f:
+                creds = pickle.load(f)
+            logger.info("Gmail token decoded from GMAIL_TOKEN_B64 env var")
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-            creds = flow.run_local_server(port=0)
+            raise RuntimeError(
+                "Gmail token missing or invalid and cannot do interactive OAuth in Cloud Run. "
+                "Re-run scripts/setup_gmail_watch.py locally to generate a fresh token."
+            )
 
         with open(token_path, "wb") as f:
             pickle.dump(creds, f)

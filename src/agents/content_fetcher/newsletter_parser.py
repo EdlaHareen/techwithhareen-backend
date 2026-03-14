@@ -23,6 +23,9 @@ class Story:
     summary: str
     url: Optional[str]
     key_stats: list[str] = field(default_factory=list)
+    # Most shocking number/stat — shown big on slide 2 (e.g. {"value": "70%", "label": "OF SAMSUNG RAM GOES TO NVIDIA"})
+    hook_stat_value: str = ""
+    hook_stat_label: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -30,6 +33,8 @@ class Story:
             "summary": self.summary,
             "url": self.url,
             "key_stats": self.key_stats,
+            "hook_stat_value": self.hook_stat_value,
+            "hook_stat_label": self.hook_stat_label,
         }
 
 
@@ -57,7 +62,9 @@ For each story, extract:
 - headline: the story title (concise, no punctuation at end)
 - summary: 2-3 sentence summary of the key points
 - url: the main source URL (or null if not present)
-- key_stats: list of 2-5 specific facts, numbers, or statistics from the story
+- key_stats: list of 3-7 specific facts, numbers, or statistics from the story (more is better)
+- hook_stat_value: the single most shocking number or percentage from the story (e.g. "70%", "$4B", "10x"). Short — 1-5 chars max.
+- hook_stat_label: a short ALL CAPS phrase that gives the number context (e.g. "OF SAMSUNG RAM GOES TO NVIDIA", "RAISED IN SERIES B"). Max 6 words.
 
 Return a JSON array of story objects. Only include genuine news stories — skip ads, footers, and navigation links.
 
@@ -88,6 +95,8 @@ Return ONLY valid JSON, no explanation:"""
                 summary=item.get("summary", "").strip(),
                 url=item.get("url"),
                 key_stats=item.get("key_stats", []),
+                hook_stat_value=item.get("hook_stat_value", "").strip(),
+                hook_stat_label=item.get("hook_stat_label", "").strip(),
             )
             if story.headline and story.summary:
                 stories.append(story)

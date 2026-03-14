@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from src.agents.telegram_bot.bot import dp, bot, register_webhook
 from src.orchestrator.handler import InstaHandlerManager
@@ -79,6 +80,29 @@ async def telegram_webhook(request: Request):
     except Exception as e:
         logger.error(f"telegram_webhook error: {e}", exc_info=True)
         return Response(status_code=200)
+
+
+class TestStoryRequest(BaseModel):
+    headline: str
+    summary: str
+    url: str = "https://example.com"
+
+
+@app.post("/test/story")
+async def test_story(payload: TestStoryRequest):
+    """
+    Dev/test endpoint — runs a single story through the full pipeline
+    (PostCreator → CaptionWriter → PostAnalyzer → Telegram).
+    Bypasses Gmail and Pub/Sub entirely.
+    """
+    from src.agents.content_fetcher.newsletter_parser import Story
+    story = Story(
+        headline=payload.headline,
+        summary=payload.summary,
+        url=payload.url,
+    )
+    asyncio.create_task(orchestrator._process_story_and_send(story))
+    return JSONResponse({"status": "pipeline started", "headline": payload.headline})
 
 
 @app.post("/renew-watch")

@@ -65,6 +65,16 @@ resource "google_cloud_run_v2_service" "orchestrator" {
         }
       }
 
+      env {
+        name = "GMAIL_TOKEN_B64"
+        value_source {
+          secret_key_ref {
+            secret  = "gmail-oauth-token"
+            version = "latest"
+          }
+        }
+      }
+
       # Non-secret config
       env {
         name  = "GCP_PROJECT_ID"
@@ -75,8 +85,12 @@ resource "google_cloud_run_v2_service" "orchestrator" {
         value = google_redis_instance.telegram_fsm.host
       }
       env {
-        name  = "CANVA_TEMPLATE_ID"
-        value = "DAHDs0ivk0M"
+        name  = "SERVICE_URL"
+        value = "https://${var.app_name}-h76gkuoriq-uc.a.run.app"
+      }
+      env {
+        name  = "GMAIL_TOKEN_PATH"
+        value = "/tmp/token.pickle"
       }
 
       liveness_probe {

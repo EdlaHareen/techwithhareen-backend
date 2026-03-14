@@ -110,6 +110,24 @@ class InstaHandlerManager:
 
         logger.info("=== InstaHandlerManager: pipeline complete ===")
 
+    async def _process_story_and_send(self, story: Story) -> None:
+        """Test helper: process one story and send result to Telegram."""
+        result = await self._process_story(story)
+        if result.passed:
+            await send_post_for_approval(
+                story_id=result.story_id,
+                headline=result.story.headline,
+                slide_urls=result.carousel.export_urls if result.carousel else [],
+                caption_text=result.caption.full_text if result.caption else "",
+            )
+        else:
+            issues = result.analysis.issues if result.analysis else [result.skip_reason or "Unknown"]
+            await send_failure_alert(
+                story_id=result.story_id,
+                headline=result.story.headline,
+                issues=issues,
+            )
+
     async def _process_story(self, story: Story) -> StoryResult:
         """
         Run the full pipeline for a single story.

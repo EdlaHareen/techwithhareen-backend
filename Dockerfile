@@ -2,17 +2,20 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system deps needed for some Python packages
+# Install system deps (gcc for Python extensions, libjpeg/zlib for Pillow)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    libjpeg62-turbo-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps first (better layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code and bundled assets (fonts)
 COPY src/ ./src/
+COPY assets/ ./assets/
 
 # Run as non-root
 RUN adduser --disabled-password --gecos '' appuser

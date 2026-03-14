@@ -40,11 +40,13 @@ class PostCreatorAgent:
         else:
             logger.info("  No image found — proceeding without image")
 
-        # Step 2: Create carousel in Canva
+        # Step 2: Create carousel
         result = await create_carousel(
             headline=story.headline,
             key_stats=story.key_stats if story.key_stats else [story.summary],
             image_url=image_url,
+            hook_stat_value=story.hook_stat_value,
+            hook_stat_label=story.hook_stat_label,
         )
 
         if result.success:

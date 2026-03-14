@@ -1,0 +1,509 @@
+"""
+Carousel Renderer — Pillow-based PNG generator for @techwithhareen Instagram carousels.
+
+Design language: "UncoverAI" style
+  - Pure black background (#000000)
+  - Accent: neon periwinkle #8075FF
+  - Font: Anton (heavy condensed) for headlines, Inter for body
+  - Layout: top 50% = story image (with vignette), bottom 50% = massive ALL CAPS text
+  - Word-level color alternation: key words in accent, rest in white
+
+Produces 4 slides at 1080×1350 (portrait 4:5):
+  Slide 1 — Cover:   Story image top + "DO YOU KNOW" label + bold headline bottom
+  Slide 2 — Teaser:  Full-bleed accent + "CHECK THE NEXT SLIDE"
+  Slide 3 — Content: Stat bullets (accent numbers, white text)
+  Slide 4 — CTA:     "FOLLOW @techwithhareen" call to action
+"""
+
+import io
+import logging
+import os
+from pathlib import Path
+from typing import Optional
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+logger = logging.getLogger(__name__)
+
+# ── Canvas ─────────────────────────────────────────────────────────────────────
+W, H = 1080, 1350
+
+# ── Palette ────────────────────────────────────────────────────────────────────
+BLACK   = (0, 0, 0)
+WHITE   = (255, 255, 255)
+ACCENT  = (128, 117, 255)   # #8075FF — neon periwinkle
+GRAY    = (160, 160, 160)
+
+# ── Asset paths ────────────────────────────────────────────────────────────────
+FONTS_DIR = Path(__file__).parent.parent.parent / "assets" / "fonts"
+
+_ANTON   = FONTS_DIR / "Anton-Regular.ttf"
+_INTER   = FONTS_DIR / "Inter-Regular.ttf"
+_INTER_SB = FONTS_DIR / "Inter-SemiBold.ttf"
+
+_SYSTEM_BOLD = [
+    "/System/Library/Fonts/Supplemental/Impact.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+]
+
+
+def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
+    paths = {
+        "anton":    [_ANTON] + _SYSTEM_BOLD,
+        "inter":    [_INTER],
+        "inter_sb": [_INTER_SB, _INTER],
+    }
+    for p in paths.get(name, [_ANTON]):
+        if Path(p).exists():
+            return ImageFont.truetype(str(p), size)
+    return ImageFont.load_default()
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _wrap(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
+    dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    words = text.split()
+    lines, cur = [], ""
+    for w in words:
+        test = (cur + " " + w).strip()
+        if dummy.textlength(test, font=font) <= max_w:
+            cur = test
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines or [""]
+
+
+def _line_height(font: ImageFont.FreeTypeFont) -> int:
+    bb = font.getbbox("Ag")
+    return bb[3] - bb[1]
+
+
+def _text_block_height(text: str, font: ImageFont.FreeTypeFont, max_w: int, spacing: int = 8) -> int:
+    lines = _wrap(text.upper(), font, max_w)
+    lh = _line_height(font)
+    return len(lines) * lh + max(0, len(lines) - 1) * spacing
+
+
+def _draw_text_block(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    x: int, y: int,
+    font: ImageFont.FreeTypeFont,
+    color,
+    max_w: int,
+    spacing: int = 8,
+    align: str = "left",
+) -> int:
+    """Draw wrapped text. Returns y after last line."""
+    lines = _wrap(text.upper(), font, max_w)
+    lh = _line_height(font)
+    for line in lines:
+        lw = draw.textlength(line, font=font)
+        if align == "center":
+            dx = x + (max_w - lw) // 2
+        elif align == "right":
+            dx = x + max_w - lw
+        else:
+            dx = x
+        draw.text((dx, y), line, font=font, fill=color)
+        y += lh + spacing
+    return y
+
+
+def _draw_alternating(
+    draw: ImageDraw.ImageDraw,
+    words: list[str],
+    accent_indices: set[int],
+    x: int, y: int,
+    font: ImageFont.FreeTypeFont,
+    max_w: int,
+    spacing: int = 10,
+    align: str = "center",
+) -> int:
+    """
+    Draw a list of words with alternating colors (white vs accent).
+    accent_indices: set of word positions that should be ACCENT colored.
+    Words are wrapped to fit max_w. Returns y after last line.
+    """
+    dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    lh = _line_height(font)
+    sp = int(dummy.textlength(" ", font=font))
+
+    # Build lines with word-index tracking
+    lines: list[list[tuple[str, int]]] = []  # [(word, original_index), ...]
+    cur_line: list[tuple[str, int]] = []
+    cur_w = 0
+
+    for i, word in enumerate(words):
+        ww = int(dummy.textlength(word.upper(), font=font))
+        needed = ww if not cur_line else ww + sp
+        if cur_w + needed <= max_w or not cur_line:
+            cur_line.append((word, i))
+            cur_w += needed
+        else:
+            lines.append(cur_line)
+            cur_line = [(word, i)]
+            cur_w = ww
+
+    if cur_line:
+        lines.append(cur_line)
+
+    for line in lines:
+        line_w = sum(int(dummy.textlength(w.upper(), font=font)) for w, _ in line) + sp * (len(line) - 1)
+        if align == "center":
+            dx = x + (max_w - line_w) // 2
+        else:
+            dx = x
+
+        for w, idx in line:
+            color = ACCENT if idx in accent_indices else WHITE
+            ww = int(dummy.textlength(w.upper(), font=font))
+            draw.text((dx, y), w.upper(), font=font, fill=color)
+            dx += ww + sp
+
+        y += lh + spacing
+
+    return y
+
+
+# ── Background & image helpers ─────────────────────────────────────────────────
+
+def _black_canvas() -> Image.Image:
+    return Image.new("RGB", (W, H), BLACK)
+
+
+def _place_image_top(base: Image.Image, image_bytes: bytes, frac: float = 0.52) -> Image.Image:
+    """
+    Place a story image in the top `frac` of the canvas with a bottom vignette
+    so it blends into the black bottom section.
+    """
+    img_h = int(H * frac)
+    try:
+        story = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        # Crop to fill the top band (center crop)
+        sw, sh = story.size
+        target_ratio = W / img_h
+        src_ratio = sw / sh
+        if src_ratio > target_ratio:
+            new_w = int(sh * target_ratio)
+            left = (sw - new_w) // 2
+            story = story.crop((left, 0, left + new_w, sh))
+        else:
+            new_h = int(sw / target_ratio)
+            top = (sh - new_h) // 2
+            story = story.crop((0, top, sw, top + new_h))
+        story = story.resize((W, img_h), Image.LANCZOS)
+
+        # Bottom vignette — gradient from transparent to black
+        vignette = Image.new("RGBA", (W, img_h), (0, 0, 0, 0))
+        vd = ImageDraw.Draw(vignette)
+        vig_start = int(img_h * 0.45)
+        for row in range(vig_start, img_h):
+            alpha = int(255 * (row - vig_start) / (img_h - vig_start))
+            vd.line([(0, row), (W, row)], fill=(0, 0, 0, alpha))
+
+        story_rgba = story.convert("RGBA")
+        story_rgba = Image.alpha_composite(story_rgba, vignette)
+
+        base.paste(story_rgba.convert("RGB"), (0, 0))
+    except Exception as e:
+        logger.warning(f"Could not place image: {e}")
+
+    return base
+
+
+def _vignette_edges(img: Image.Image, strength: int = 140) -> Image.Image:
+    """Subtle edge vignette on a full black canvas slide."""
+    vig = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(vig)
+    steps = 80
+    for i in range(steps):
+        alpha = int(strength * (i / steps) ** 2)
+        margin = i * 6
+        d.rectangle(
+            [margin, margin, W - margin, H - margin],
+            outline=(0, 0, 0, strength - alpha),
+            width=6,
+        )
+    return Image.alpha_composite(img.convert("RGBA"), vig).convert("RGB")
+
+
+# ── Brand label ────────────────────────────────────────────────────────────────
+
+def _draw_brand(draw: ImageDraw.ImageDraw, y_top: int = 36) -> None:
+    """Top-left: small '@techwithhareen' in accent color."""
+    f = _font("inter_sb", 26)
+    draw.text((44, y_top), "@techwithhareen", font=f, fill=ACCENT)
+
+
+def _draw_slide_counter(draw: ImageDraw.ImageDraw, current: int, total: int) -> None:
+    """Top-right: '1 / 4' in gray."""
+    f = _font("inter", 24)
+    label = f"{current} / {total}"
+    lw = draw.textlength(label, font=f)
+    draw.text((W - 44 - lw, 36), label, font=f, fill=GRAY)
+
+
+# ── Slide builders ─────────────────────────────────────────────────────────────
+
+def _slide_cover(headline: str, image_bytes: Optional[bytes], total: int) -> Image.Image:
+    """
+    Slide 1 — Cover.
+    Top 52%: story image with bottom vignette.
+    Bottom 48%: "DO YOU KNOW" label + massive headline, word-level accent highlights.
+    """
+    img = _black_canvas()
+
+    if image_bytes:
+        img = _place_image_top(img, image_bytes, frac=0.52)
+
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, 1, total)
+
+    pad = 44
+    text_zone_top = int(H * 0.50)
+    max_w = W - 2 * pad
+
+    # "DO YOU KNOW" pill label
+    label_f = _font("inter_sb", 28)
+    label = "DO YOU KNOW"
+    lw = int(draw.textlength(label, font=label_f))
+    lh = _line_height(label_f)
+    pill_pad_x, pill_pad_y = 18, 10
+    pill_x = (W - lw - 2 * pill_pad_x) // 2
+    pill_y = text_zone_top + 10
+    draw.rounded_rectangle(
+        [pill_x, pill_y, pill_x + lw + 2 * pill_pad_x, pill_y + lh + 2 * pill_pad_y],
+        radius=20, fill=ACCENT,
+    )
+    draw.text((pill_x + pill_pad_x, pill_y + pill_pad_y), label, font=label_f, fill=WHITE)
+
+    # Headline — Anton, large, word-level accent on first 2 key words
+    headline_f = _font("anton", 108)
+    words = headline.split()
+    # Accent the first word + any word longer than 5 chars in first half
+    accent_idx = {0}
+    for i, w in enumerate(words[:len(words) // 2 + 1]):
+        if len(w) > 5:
+            accent_idx.add(i)
+            break
+
+    y = pill_y + lh + 2 * pill_pad_y + 24
+    _draw_alternating(draw, words, accent_idx, pad, y, headline_f, max_w, spacing=6, align="center")
+
+    return img
+
+
+def _slide_hook_stat(hook_stat_value: str, hook_stat_label: str, total: int) -> Image.Image:
+    """
+    Slide 2 — Hook Stat.
+    Black bg. The single most shocking number blown up in accent color.
+    Short context label in white underneath.
+
+    Falls back to a generic teaser if no hook stat is available.
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=60)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, 2, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+
+    if hook_stat_value:
+        # Big number — as large as it can go (auto-size to fit)
+        for size in range(320, 80, -10):
+            f_num = _font("anton", size)
+            if draw.textlength(hook_stat_value.upper(), font=f_num) <= max_w:
+                break
+
+        f_label = _font("anton", 72)
+        f_sub = _font("inter_sb", 34)
+
+        num_h = _line_height(f_num) + 20   # extra breathing room below number
+        label_h = _text_block_height(hook_stat_label, f_label, max_w, spacing=4) if hook_stat_label else 0
+        sub_h = _line_height(f_sub)
+        gap = 28
+        block_h = num_h + (gap + label_h if hook_stat_label else 0) + gap + sub_h
+        y = (H - block_h) // 2
+
+        # Big accent number
+        nw = int(draw.textlength(hook_stat_value.upper(), font=f_num))
+        draw.text(((W - nw) // 2, y), hook_stat_value.upper(), font=f_num, fill=ACCENT)
+        y += num_h
+
+        # Context label in white
+        if hook_stat_label:
+            y += gap
+            _draw_text_block(draw, hook_stat_label, pad, y, f_label, WHITE, max_w, spacing=4, align="center")
+            y += label_h
+
+        # Sub-label
+        y += gap
+        sub = "SWIPE TO FIND OUT WHY"
+        sw = int(draw.textlength(sub, font=f_sub))
+        draw.text(((W - sw) // 2, y), sub, font=f_sub, fill=GRAY)
+
+    else:
+        # Fallback: accent bg with generic teaser
+        img = Image.new("RGB", (W, H), ACCENT)
+        draw = ImageDraw.Draw(img)
+        _draw_brand(draw)
+        _draw_slide_counter(draw, 2, total)
+
+        f = _font("anton", 120)
+        h1 = _text_block_height("THIS IS", f, max_w, spacing=0)
+        h2 = _text_block_height("INSANE.", f, max_w, spacing=0)
+        gap = 30
+        y = (H - h1 - gap - h2) // 2
+        _draw_text_block(draw, "THIS IS", pad, y, f, BLACK, max_w, spacing=0, align="center")
+        y += h1 + gap
+        _draw_text_block(draw, "INSANE.", pad, y, f, WHITE, max_w, spacing=0, align="center")
+
+    return img
+
+
+def _slide_content(stats: list[str], slide_num: int, total: int) -> Image.Image:
+    """
+    Slide 3+ — Content bullets.
+    Black bg, accent number/bullet, white stat text.
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=80)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    num_f = _font("anton", 72)
+    stat_f = _font("inter_sb", 38)
+    max_w = W - 2 * pad
+
+    n = min(len(stats), 4)
+    # Estimate total height
+    row_h = _line_height(num_f) + 16 + _line_height(stat_f) * 2 + 40
+    block_h = n * row_h
+    y = max(120, (H - block_h) // 2)
+
+    for i, stat in enumerate(stats[:4]):
+        # Accent number
+        num_str = f"{i + 1:02d}"
+        draw.text((pad, y), num_str, font=num_f, fill=ACCENT)
+        num_w = int(draw.textlength(num_str, font=num_f)) + 20
+
+        # Stat text — vertically centered against the number
+        num_h = _line_height(num_f)
+        stat_lines = _wrap(stat.upper(), stat_f, max_w - num_w)
+        stat_block_h = len(stat_lines) * (_line_height(stat_f) + 6)
+        stat_y = y + max(0, (num_h - stat_block_h) // 2)
+        _draw_text_block(
+            draw, stat, pad + num_w, stat_y,
+            font=stat_f, color=WHITE,
+            max_w=max_w - num_w,
+            spacing=6, align="left",
+        )
+
+        row_bottom = y + max(num_h, stat_block_h) + 16
+
+        # Thin divider below the full row
+        draw.line([(pad, row_bottom), (W - pad, row_bottom)], fill=(80, 75, 180), width=1)
+
+        y = row_bottom + 24
+
+    return img
+
+
+def _slide_cta(total: int) -> Image.Image:
+    """
+    Slide 4 — CTA (evergreen).
+    Black bg, massive white text, accent handle.
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=100)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, total, total)
+
+    f_big = _font("anton", 118)
+    f_handle = _font("anton", 72)
+    pad = 44
+    max_w = W - 2 * pad
+
+    lines_big = ["FOLLOW", "FOR MORE"]
+    h_big = sum(_text_block_height(l, f_big, max_w, 0) for l in lines_big) + 10
+    h_handle = _text_block_height("@TECHWITHHAREEN", f_handle, max_w, 0)
+    gap = 32
+    total_h = h_big + gap + h_handle
+    y = (H - total_h) // 2
+
+    for line in lines_big:
+        lh = _text_block_height(line, f_big, max_w, 0)
+        _draw_text_block(draw, line, pad, y, f_big, WHITE, max_w, spacing=0, align="center")
+        y += lh + 10
+
+    y += gap
+    _draw_text_block(draw, "@techwithhareen", pad, y, f_handle, ACCENT, max_w, spacing=0, align="center")
+
+    return img
+
+
+# ── Public API ─────────────────────────────────────────────────────────────────
+
+def render_carousel(
+    headline: str,
+    stats: list[str],
+    image_bytes: Optional[bytes] = None,
+    hook_stat_value: str = "",
+    hook_stat_label: str = "",
+    output_dir: Optional[str] = None,
+) -> list[str]:
+    """
+    Render a 4+ slide carousel and save PNGs to output_dir (default: /tmp).
+
+    Args:
+        headline:          Hook headline for the cover slide.
+        stats:             Bullet-point stats for content slide(s). Max 4 per slide.
+        image_bytes:       Optional raw bytes of a JPEG/PNG for the cover slide.
+        hook_stat_value:   Big number for slide 2 (e.g. "70%").
+        hook_stat_label:   Context for slide 2 (e.g. "OF SAMSUNG RAM GOES TO NVIDIA").
+        output_dir:        Directory to save PNGs. Defaults to /tmp.
+
+    Returns:
+        List of absolute file paths to the generated PNGs.
+    """
+    out = Path(output_dir or "/tmp")
+    out.mkdir(parents=True, exist_ok=True)
+
+    # Split stats into content slides (max 4 per slide)
+    stat_chunks: list[list[str]] = []
+    for i in range(0, max(len(stats), 1), 4):
+        chunk = stats[i:i + 4]
+        if chunk:
+            stat_chunks.append(chunk)
+
+    total = 2 + len(stat_chunks) + 1  # cover + hook stat + content(s) + cta
+
+    slides: list[Image.Image] = [
+        _slide_cover(headline, image_bytes, total),
+        _slide_hook_stat(hook_stat_value, hook_stat_label, total),
+    ]
+    for idx, chunk in enumerate(stat_chunks):
+        slides.append(_slide_content(chunk, 3 + idx, total))
+    slides.append(_slide_cta(total))
+
+    paths = []
+    for i, slide in enumerate(slides, start=1):
+        path = str(out / f"slide{i}.png")
+        slide.save(path, "PNG", optimize=True)
+        paths.append(path)
+
+    logger.info(f"render_carousel: {len(paths)} slides for '{headline[:50]}'")
+    return paths
