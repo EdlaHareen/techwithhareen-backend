@@ -17,6 +17,11 @@ resource "google_cloud_run_v2_service" "orchestrator" {
 
     timeout = "270s"
 
+    vpc_access {
+      connector = "projects/${var.project_id}/locations/${var.region}/connectors/insta-handler-connector"
+      egress    = "PRIVATE_RANGES_ONLY"
+    }
+
     containers {
       image = local.image
 

@@ -9,7 +9,7 @@ anthropic>=0.40.0
 Pillow>=11.0.0
 
 # Google ADK (agent framework)
-google-adk>=0.5.0
+google-adk==1.17.0
 
 # Gmail + GCP
 google-api-python-client>=2.150.0
