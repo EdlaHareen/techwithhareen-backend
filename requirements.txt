@@ -8,9 +8,6 @@ anthropic==0.71.0
 # Image rendering
 Pillow>=11.0.0
 
-# Google ADK (agent framework)
-google-adk==1.17.0
-
 # Gmail + GCP
 google-api-python-client==2.189.0
 google-auth-httplib2==0.3.0
