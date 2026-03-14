@@ -21,7 +21,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",  # needed for watch()
 ]
 
-RUNDOWNAI_SENDER = "newsletter@rundownai.com"
+RUNDOWNAI_SENDER = "news@daily.therundown.ai"
 
 
 def get_gmail_service():
