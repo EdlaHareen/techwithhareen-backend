@@ -62,22 +62,6 @@ def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
-def _truncate_url_to_width(url: str, font: ImageFont.FreeTypeFont, max_px: int, suffix: str = "…") -> str:
-    """Binary-search truncate a URL to fit within max_px pixels."""
-    dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    if dummy.textlength(url, font=font) <= max_px:
-        return url
-    suffix_w = dummy.textlength(suffix, font=font)
-    lo, hi = 0, len(url)
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if dummy.textlength(url[:mid], font=font) + suffix_w <= max_px:
-            lo = mid
-        else:
-            hi = mid - 1
-    return url[:lo] + suffix
-
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _wrap(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
@@ -465,7 +449,8 @@ def _slide_content(stats: list[str], slide_num: int, total: int, start_num: int 
 def _slide_read_more(url: str, slide_num: int, total: int) -> Image.Image:
     """
     Read More slide — second-to-last.
-    Black bg, accent 'READ MORE' label, white truncated URL below.
+    Black bg, accent 'LINK IN' + white 'DESCRIPTION' — no URL on slide.
+    The actual URL lives in the caption only.
     """
     img = _black_canvas()
     img = _vignette_edges(img, strength=100)
@@ -476,21 +461,17 @@ def _slide_read_more(url: str, slide_num: int, total: int) -> Image.Image:
     pad = 44
     max_w = W - 2 * pad
 
-    f_label = _font("anton", 118)
-    f_url = _font("inter", 34)
+    f_big = _font("anton", 118)
 
-    label_h = _text_block_height("READ MORE", f_label, max_w, 0)
-    url_display = _truncate_url_to_width(url, f_url, max_w)
-    url_h = _line_height(f_url)
-    gap = 40
-    block_h = label_h + gap + url_h
+    h1 = _text_block_height("LINK IN", f_big, max_w, 0)
+    h2 = _text_block_height("DESCRIPTION", f_big, max_w, 0)
+    gap = 16
+    block_h = h1 + gap + h2
     y = (H - block_h) // 2
 
-    _draw_text_block(draw, "READ MORE", pad, y, f_label, ACCENT, max_w, spacing=0, align="center")
-    y += label_h + gap
-
-    url_w = int(draw.textlength(url_display, font=f_url))
-    draw.text(((W - url_w) // 2, y), url_display, font=f_url, fill=WHITE)
+    _draw_text_block(draw, "LINK IN", pad, y, f_big, ACCENT, max_w, spacing=0, align="center")
+    y += h1 + gap
+    _draw_text_block(draw, "DESCRIPTION", pad, y, f_big, WHITE, max_w, spacing=0, align="center")
 
     return img
 
