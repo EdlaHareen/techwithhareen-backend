@@ -10,9 +10,10 @@ Pipeline per story:
 
 import logging
 
-from src.agents.content_fetcher.newsletter_parser import Story
+from src.utils.story import Story
 from src.agents.post_creator.image_fetcher import search_image, build_image_query
-from src.utils.canva_session import CarouselResult, create_carousel
+from src.utils.carousel_result import CarouselResult
+from src.utils.carousel_service import create_carousel
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class PostCreatorAgent:
             image_url=image_url,
             hook_stat_value=story.hook_stat_value,
             hook_stat_label=story.hook_stat_label,
+            source_url=story.url,
         )
 
         if result.success:

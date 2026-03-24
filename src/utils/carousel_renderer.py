@@ -18,6 +18,7 @@ Produces 4 slides at 1080×1350 (portrait 4:5):
 import io
 import logging
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +49,7 @@ _SYSTEM_BOLD = [
 ]
 
 
+@lru_cache(maxsize=32)
 def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
     paths = {
         "anton":    [_ANTON] + _SYSTEM_BOLD,
@@ -58,6 +60,22 @@ def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
         if Path(p).exists():
             return ImageFont.truetype(str(p), size)
     return ImageFont.load_default()
+
+
+def _truncate_url_to_width(url: str, font: ImageFont.FreeTypeFont, max_px: int, suffix: str = "…") -> str:
+    """Binary-search truncate a URL to fit within max_px pixels."""
+    dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    if dummy.textlength(url, font=font) <= max_px:
+        return url
+    suffix_w = dummy.textlength(suffix, font=font)
+    lo, hi = 0, len(url)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if dummy.textlength(url[:mid], font=font) + suffix_w <= max_px:
+            lo = mid
+        else:
+            hi = mid - 1
+    return url[:lo] + suffix
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -371,10 +389,13 @@ def _slide_hook_stat(hook_stat_value: str, hook_stat_label: str, total: int) -> 
     return img
 
 
-def _slide_content(stats: list[str], slide_num: int, total: int) -> Image.Image:
+def _slide_content(stats: list[str], slide_num: int, total: int, start_num: int = 0) -> Image.Image:
     """
     Slide 3+ — Content bullets.
-    Black bg, accent number/bullet, white stat text.
+    Each stat is formatted as "HEADLINE\nExplanation sentence".
+    Black bg, accent number, white headline, gray explanation.
+    Items are distributed evenly to fill the full slide height.
+    Numbering is continuous across content slides via start_num.
     """
     img = _black_canvas()
     img = _vignette_edges(img, strength=80)
@@ -383,40 +404,93 @@ def _slide_content(stats: list[str], slide_num: int, total: int) -> Image.Image:
     _draw_slide_counter(draw, slide_num, total)
 
     pad = 44
-    num_f = _font("anton", 72)
-    stat_f = _font("inter_sb", 38)
+    num_f = _font("anton", 68)
+    headline_f = _font("inter_sb", 38)
+    body_f = _font("inter", 30)
     max_w = W - 2 * pad
 
     n = min(len(stats), 4)
-    # Estimate total height
-    row_h = _line_height(num_f) + 16 + _line_height(stat_f) * 2 + 40
-    block_h = n * row_h
-    y = max(120, (H - block_h) // 2)
+    top = 130
+    bottom = H - 60
+    slot_h = (bottom - top) // n
 
     for i, stat in enumerate(stats[:4]):
-        # Accent number
-        num_str = f"{i + 1:02d}"
-        draw.text((pad, y), num_str, font=num_f, fill=ACCENT)
+        # Parse headline and explanation
+        parts = stat.split("\n", 1)
+        headline = parts[0].strip()
+        explanation = parts[1].strip() if len(parts) > 1 else ""
+
+        num_str = f"{start_num + i + 1:02d}"
         num_w = int(draw.textlength(num_str, font=num_f)) + 20
-
-        # Stat text — vertically centered against the number
         num_h = _line_height(num_f)
-        stat_lines = _wrap(stat.upper(), stat_f, max_w - num_w)
-        stat_block_h = len(stat_lines) * (_line_height(stat_f) + 6)
-        stat_y = y + max(0, (num_h - stat_block_h) // 2)
-        _draw_text_block(
-            draw, stat, pad + num_w, stat_y,
-            font=stat_f, color=WHITE,
-            max_w=max_w - num_w,
-            spacing=6, align="left",
-        )
+        text_x = pad + num_w
 
-        row_bottom = y + max(num_h, stat_block_h) + 16
+        # Measure content block height
+        headline_lines = _wrap(headline, headline_f, max_w - num_w)
+        headline_h = len(headline_lines) * (_line_height(headline_f) + 4)
+        body_lines = _wrap(explanation, body_f, max_w - num_w) if explanation else []
+        body_h = len(body_lines) * (_line_height(body_f) + 3) if body_lines else 0
+        gap = 10
+        text_block_h = headline_h + (gap + body_h if body_h else 0)
+        content_h = max(num_h, text_block_h)
 
-        # Thin divider below the full row
-        draw.line([(pad, row_bottom), (W - pad, row_bottom)], fill=(80, 75, 180), width=1)
+        # Center content block within its slot
+        slot_top = top + i * slot_h
+        y = slot_top + (slot_h - content_h) // 2
 
-        y = row_bottom + 24
+        # Draw accent number
+        draw.text((pad, y), num_str, font=num_f, fill=ACCENT)
+
+        # Draw headline — vertically aligned to number top
+        hy = y + max(0, (num_h - text_block_h) // 2)
+        for line in headline_lines:
+            draw.text((text_x, hy), line.upper(), font=headline_f, fill=WHITE)
+            hy += _line_height(headline_f) + 4
+
+        # Draw explanation below headline
+        if body_lines:
+            by = y + max(0, (num_h - text_block_h) // 2) + headline_h + gap
+            for line in body_lines:
+                draw.text((text_x, by), line, font=body_f, fill=GRAY)
+                by += _line_height(body_f) + 3
+
+        # Divider between items
+        if i < n - 1:
+            div_y = slot_top + slot_h - 1
+            draw.line([(pad, div_y), (W - pad, div_y)], fill=(80, 75, 180), width=1)
+
+    return img
+
+
+def _slide_read_more(url: str, slide_num: int, total: int) -> Image.Image:
+    """
+    Read More slide — second-to-last.
+    Black bg, accent 'READ MORE' label, white truncated URL below.
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=100)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+
+    f_label = _font("anton", 118)
+    f_url = _font("inter", 34)
+
+    label_h = _text_block_height("READ MORE", f_label, max_w, 0)
+    url_display = _truncate_url_to_width(url, f_url, max_w)
+    url_h = _line_height(f_url)
+    gap = 40
+    block_h = label_h + gap + url_h
+    y = (H - block_h) // 2
+
+    _draw_text_block(draw, "READ MORE", pad, y, f_label, ACCENT, max_w, spacing=0, align="center")
+    y += label_h + gap
+
+    url_w = int(draw.textlength(url_display, font=f_url))
+    draw.text(((W - url_w) // 2, y), url_display, font=f_url, fill=WHITE)
 
     return img
 
@@ -464,6 +538,7 @@ def render_carousel(
     hook_stat_value: str = "",
     hook_stat_label: str = "",
     output_dir: Optional[str] = None,
+    source_url: str | None = None,
 ) -> list[str]:
     """
     Render a 4+ slide carousel and save PNGs to output_dir (default: /tmp).
@@ -489,20 +564,26 @@ def render_carousel(
         if chunk:
             stat_chunks.append(chunk)
 
-    total = 2 + len(stat_chunks) + 1  # cover + hook stat + content(s) + cta
+    has_read_more = bool(source_url)
+    total = 2 + len(stat_chunks) + (1 if has_read_more else 0) + 1
 
     slides: list[Image.Image] = [
         _slide_cover(headline, image_bytes, total),
         _slide_hook_stat(hook_stat_value, hook_stat_label, total),
     ]
+    start_num = 0
     for idx, chunk in enumerate(stat_chunks):
-        slides.append(_slide_content(chunk, 3 + idx, total))
+        slides.append(_slide_content(chunk, 3 + idx, total, start_num=start_num))
+        start_num += len(chunk)
+    if has_read_more:
+        slides.append(_slide_read_more(source_url, total - 1, total))
     slides.append(_slide_cta(total))
 
     paths = []
     for i, slide in enumerate(slides, start=1):
         path = str(out / f"slide{i}.png")
         slide.save(path, "PNG", optimize=True)
+        slide.close()  # free pixel buffer immediately after saving
         paths.append(path)
 
     logger.info(f"render_carousel: {len(paths)} slides for '{headline[:50]}'")
