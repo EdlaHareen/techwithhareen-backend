@@ -17,3 +17,4 @@ class CarouselResult:
     slide_count: int = 0
     success: bool = True
     error: Optional[str] = None
+    image_url: Optional[str] = None  # original cover image URL — stored for slide re-render

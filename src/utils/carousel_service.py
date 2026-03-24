@@ -157,6 +157,7 @@ async def create_carousel(
             export_urls=export_urls,
             slide_count=len(paths),
             success=True,
+            image_url=image_url,
         )
 
     except Exception as e:

@@ -144,9 +144,13 @@ async def create_post(
     slides: list[str],
     caption: str,
     source: Literal["newsletter", "web_ui"],
+    render_data: Optional[dict] = None,
 ) -> str:
     """
     Persist a completed post (slides + caption) to the approval queue.
+
+    render_data stores the carousel render params (headline, key_stats, image_url, etc.)
+    so slides can be re-rendered after inline edits.
 
     Returns the Firestore document ID (post_id).
     """
@@ -158,6 +162,7 @@ async def create_post(
         "status": "pending",
         "source": source,
         "telegram_sent": False,
+        "render_data": render_data or {},
         "created_at": firestore.SERVER_TIMESTAMP,
         "approved_at": None,
         "rejection_reason": None,
@@ -238,3 +243,50 @@ async def mark_telegram_sent(post_id: str) -> None:
         "telegram_sent": True,
     })
     logger.info(f"Post {post_id} marked telegram_sent")
+
+
+async def update_post_slides_and_render_data(
+    post_id: str,
+    slides: list[str],
+    render_data: dict,
+) -> None:
+    """Replace a post's slides (GCS URLs) and render_data after re-rendering."""
+    client = _get_client()
+    await client.collection(POSTS_COLLECTION).document(post_id).update({
+        "slides": slides,
+        "render_data": render_data,
+    })
+    logger.info(f"Post {post_id} slides re-rendered ({len(slides)} slides)")
+
+
+async def delete_post_slide(post_id: str, slide_index: int) -> list[str]:
+    """
+    Remove the slide at slide_index from a post's slides array.
+    Returns the updated slides list.
+    """
+    client = _get_client()
+    doc = await client.collection(POSTS_COLLECTION).document(post_id).get()
+    slides: list[str] = doc.to_dict().get("slides", [])
+    if slide_index < 0 or slide_index >= len(slides):
+        raise IndexError(f"Slide index {slide_index} out of range (post has {len(slides)} slides)")
+    slides.pop(slide_index)
+    await client.collection(POSTS_COLLECTION).document(post_id).update({"slides": slides})
+    logger.info(f"Post {post_id} slide {slide_index} deleted ({len(slides)} slides remaining)")
+    return slides
+
+
+async def reorder_post_slides(post_id: str, new_order: list[int]) -> list[str]:
+    """
+    Reorder a post's slides by a list of original indices.
+    e.g. new_order=[2, 0, 1] moves slide 2 to position 0.
+    Returns the reordered slides list.
+    """
+    client = _get_client()
+    doc = await client.collection(POSTS_COLLECTION).document(post_id).get()
+    slides: list[str] = doc.to_dict().get("slides", [])
+    if sorted(new_order) != list(range(len(slides))):
+        raise ValueError(f"new_order must be a permutation of 0..{len(slides)-1}")
+    reordered = [slides[i] for i in new_order]
+    await client.collection(POSTS_COLLECTION).document(post_id).update({"slides": reordered})
+    logger.info(f"Post {post_id} slides reordered")
+    return reordered

@@ -1,14 +1,17 @@
 """
-v2 API routes — Web UI topic research, post approval queue, and caption editing.
+v2 API routes — Web UI topic research, post approval queue, and caption/slide editing.
 
 Inputs:
-  POST /api/v2/research              — start a research job for a topic
-  GET  /api/v2/jobs/{job_id}         — poll job status + stories
-  GET  /api/v2/posts                 — list all posts (filterable by status)
-  GET  /api/v2/posts/{post_id}       — get a single post
-  POST /api/v2/posts/{post_id}/approve  — approve a post (triggers publisher)
-  POST /api/v2/posts/{post_id}/reject   — reject a post with optional reason
-  PATCH /api/v2/posts/{post_id}/caption — edit caption before approving
+  POST /api/v2/research                          — start a research job for a topic
+  GET  /api/v2/jobs/{job_id}                     — poll job status + stories
+  GET  /api/v2/posts                             — list all posts (filterable by status)
+  GET  /api/v2/posts/{post_id}                   — get a single post
+  POST /api/v2/posts/{post_id}/approve           — approve a post (triggers publisher)
+  POST /api/v2/posts/{post_id}/reject            — reject a post with optional reason
+  PATCH /api/v2/posts/{post_id}/caption          — edit caption before approving
+  PATCH /api/v2/posts/{post_id}/slides           — edit render data + re-render all slides
+  DELETE /api/v2/posts/{post_id}/slides/{index}  — remove a slide by index
+  POST /api/v2/posts/{post_id}/slides/reorder    — reorder slides by index permutation
 """
 
 import asyncio
@@ -52,6 +55,19 @@ class RejectRequest(BaseModel):
 
 class UpdateCaptionRequest(BaseModel):
     caption: str
+
+
+class UpdateSlidesRequest(BaseModel):
+    headline: str
+    key_stats: list[str]
+    hook_stat_value: str = ""
+    hook_stat_label: str = ""
+    source_url: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class ReorderSlidesRequest(BaseModel):
+    order: list[int]  # permutation of 0..N-1 representing new slide positions
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +196,87 @@ async def update_caption(post_id: str, body: UpdateCaptionRequest):
     return JSONResponse({"updated": True})
 
 
+@router.patch("/posts/{post_id}/slides")
+async def update_slides(post_id: str, body: UpdateSlidesRequest):
+    """
+    Edit a post's render data and re-render all slides.
+    Re-renders the entire carousel via Pillow and uploads new PNGs to GCS.
+    Returns the updated list of GCS slide URLs.
+    """
+    from src.utils.carousel_service import create_carousel
+
+    post = await db.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="Can only edit slides of a pending post")
+
+    result = await create_carousel(
+        headline=body.headline,
+        key_stats=body.key_stats,
+        image_url=body.image_url,
+        hook_stat_value=body.hook_stat_value,
+        hook_stat_label=body.hook_stat_label,
+        source_url=body.source_url,
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=500, detail=f"Re-render failed: {result.error}")
+
+    render_data = {
+        "headline": body.headline,
+        "key_stats": body.key_stats,
+        "hook_stat_value": body.hook_stat_value,
+        "hook_stat_label": body.hook_stat_label,
+        "source_url": body.source_url,
+        "image_url": body.image_url,
+    }
+    await db.update_post_slides_and_render_data(post_id, result.export_urls, render_data)
+    logger.info(f"Post {post_id} slides re-rendered ({result.slide_count} slides)")
+    return JSONResponse({"slides": result.export_urls, "slide_count": result.slide_count})
+
+
+@router.delete("/posts/{post_id}/slides/{slide_index}")
+async def delete_slide(post_id: str, slide_index: int):
+    """
+    Remove a single slide by index from a post's slide list.
+    Does not re-render — just removes the URL from the array.
+    """
+    post = await db.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="Can only delete slides of a pending post")
+
+    try:
+        updated_slides = await db.delete_post_slide(post_id, slide_index)
+    except IndexError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return JSONResponse({"slides": updated_slides})
+
+
+@router.post("/posts/{post_id}/slides/reorder")
+async def reorder_slides(post_id: str, body: ReorderSlidesRequest):
+    """
+    Reorder a post's slides by providing a permutation of current indices.
+    e.g. {"order": [2, 0, 1, 3]} moves slide 2 to position 0.
+    Does not re-render — just reorders the URL array.
+    """
+    post = await db.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="Can only reorder slides of a pending post")
+
+    try:
+        updated_slides = await db.reorder_post_slides(post_id, body.order)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return JSONResponse({"slides": updated_slides})
+
+
 # ---------------------------------------------------------------------------
 # Background task — research → validate → pipeline → persist posts
 # ---------------------------------------------------------------------------
@@ -239,12 +336,21 @@ async def _run_research_pipeline(job_id: str, topic: str) -> None:
 
             slide_urls = result.carousel.export_urls if result.carousel else []
             caption_text = result.caption.full_text if result.caption else ""
+            render_data = {
+                "headline": result.story.headline,
+                "key_stats": result.story.key_stats,
+                "hook_stat_value": result.story.hook_stat_value,
+                "hook_stat_label": result.story.hook_stat_label,
+                "source_url": result.story.url,
+                "image_url": result.carousel.image_url if result.carousel else None,
+            }
 
             post_id = await db.create_post(
                 story=result.story,
                 slides=slide_urls,
                 caption=caption_text,
                 source="web_ui",
+                render_data=render_data,
             )
             post_ids.append(post_id)
 
