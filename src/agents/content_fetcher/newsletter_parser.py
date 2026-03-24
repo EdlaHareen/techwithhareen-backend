@@ -7,35 +7,14 @@ structured story data. This approach is resilient to DOM changes.
 
 import json
 import logging
-from dataclasses import dataclass, field
 from typing import Optional
 
 import anthropic
 import html2text
 
+from src.utils.story import Story
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class Story:
-    """A single news story extracted from the newsletter."""
-    headline: str
-    summary: str
-    url: Optional[str]
-    key_stats: list[str] = field(default_factory=list)
-    # Most shocking number/stat — shown big on slide 2 (e.g. {"value": "70%", "label": "OF SAMSUNG RAM GOES TO NVIDIA"})
-    hook_stat_value: str = ""
-    hook_stat_label: str = ""
-
-    def to_dict(self) -> dict:
-        return {
-            "headline": self.headline,
-            "summary": self.summary,
-            "url": self.url,
-            "key_stats": self.key_stats,
-            "hook_stat_value": self.hook_stat_value,
-            "hook_stat_label": self.hook_stat_label,
-        }
 
 
 def html_to_markdown(html: str) -> str:
@@ -62,7 +41,7 @@ For each story, extract:
 - headline: the story title (concise, no punctuation at end)
 - summary: 2-3 sentence summary of the key points
 - url: the main source URL (or null if not present)
-- key_stats: list of 3-7 specific facts, numbers, or statistics from the story (more is better)
+- key_stats: list of 8-12 items. Each item must be formatted as "STAT HEADLINE\nOne sentence explanation." The headline is a punchy ALL CAPS fact or number (e.g. "$4B RAISED IN SERIES B"). The explanation adds one sentence of context (e.g. "The round was led by Andreessen Horowitz at a $20B valuation.")
 - hook_stat_value: the single most shocking number or percentage from the story (e.g. "70%", "$4B", "10x"). Short — 1-5 chars max.
 - hook_stat_label: a short ALL CAPS phrase that gives the number context (e.g. "OF SAMSUNG RAM GOES TO NVIDIA", "RAISED IN SERIES B"). Max 6 words.
 

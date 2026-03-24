@@ -135,12 +135,11 @@ async def send_post_for_approval(
                     media.append(InputMediaPhoto(media=url))
             await bot.send_media_group(chat_id=chat_id, media=media)
 
-        # Send caption + keyboard as separate message
+        # Send approval header + keyboard
         short_headline = headline[:60] + ("..." if len(headline) > 60 else "")
         approval_text = (
             f"📸 *New post ready for approval*\n"
-            f"_{short_headline}_\n\n"
-            f"{caption_text[:500]}{'...' if len(caption_text) > 500 else ''}"
+            f"_{short_headline}_"
         )
         await bot.send_message(
             chat_id=chat_id,
@@ -148,6 +147,13 @@ async def send_post_for_approval(
             parse_mode="Markdown",
             reply_markup=build_approval_keyboard(story_id),
         )
+
+        # Send full caption as a separate message (Telegram caps inline captions at 1024 chars)
+        if caption_text:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=caption_text,
+            )
         logger.info(f"Sent approval request for story_id={story_id}")
 
     except Exception as e:

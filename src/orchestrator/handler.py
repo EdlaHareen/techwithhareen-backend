@@ -19,12 +19,12 @@ from typing import Optional
 
 from src.agents.caption_writer.agent import Caption, CaptionWriterAgent
 from src.agents.content_fetcher.agent import ContentFetcherAgent
-from src.agents.content_fetcher.newsletter_parser import Story
+from src.utils.story import Story
 from src.agents.post_analyzer.agent import AnalysisResult, PostAnalyzerAgent
 from src.agents.post_creator.agent import PostCreatorAgent
 from src.agents.telegram_bot.bot import send_failure_alert, send_post_for_approval
 from src.publishing.publisher import register_pending_post
-from src.utils.canva_session import CarouselResult
+from src.utils.carousel_result import CarouselResult
 from src.utils.firestore_client import log_failed_story
 
 logger = logging.getLogger(__name__)

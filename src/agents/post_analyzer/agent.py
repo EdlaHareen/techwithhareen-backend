@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 import anthropic
 
 from src.agents.caption_writer.agent import Caption
-from src.agents.content_fetcher.newsletter_parser import Story
-from src.utils.canva_session import CarouselResult
+from src.utils.story import Story
+from src.utils.carousel_result import CarouselResult
 
 logger = logging.getLogger(__name__)
 

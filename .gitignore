@@ -32,6 +32,9 @@ service-account*.json
 *.swp
 *.swo
 
+# Claude auto-memory (not source code)
+memory/
+
 # macOS
 .DS_Store
 

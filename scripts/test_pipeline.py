@@ -52,10 +52,9 @@ def open_images(paths: list[str]) -> None:
 
 
 async def run(headline: str, summary: str) -> None:
-    from src.agents.content_fetcher.newsletter_parser import Story
+    from src.utils.story import Story
     from src.agents.post_creator.image_fetcher import build_image_query, search_image
-    from src.utils.carousel_renderer import render_carousel
-    from src.utils.canva_session import create_carousel
+    from src.utils.carousel_service import create_carousel
 
     story = Story(headline=headline, summary=summary, url="https://example.com")
 
