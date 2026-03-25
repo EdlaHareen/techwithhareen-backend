@@ -8,6 +8,17 @@ The system has two entry points:
 - **v1** — reads the daily rundownai newsletter from Gmail, creates carousel posts, writes captions, analyzes quality, and sends to the owner via Telegram for approval
 - **v2** — owner types any topic in a web UI, parallel research agents gather content, and the same pipeline produces posts for approval in the browser
 
+**Current version: v3 shipped. v4 planned (BRD + PRD written in docs/).**
+
+## Version History
+
+| Version | Status | Key Features |
+|---------|--------|--------------|
+| v1 | ✅ Live | Gmail newsletter → carousel → Telegram approval |
+| v2 | ✅ Live | Web UI topic research (Exa+Tavily+Serper) → carousel → web approval queue |
+| v3 | ✅ Live | Slide editor, personal-voice captions (Hareen's tone), Read More → "LINK IN DESCRIPTION" |
+| v4 | 🔲 Planned | Algorithm compliance fixes + Reels Script Agent + content classifier + recurring series + Stories pipeline |
+
 ## Agent Architecture
 
 ### Insta Handler Manager (Orchestrator)
@@ -40,30 +51,35 @@ The system has two entry points:
 ### Post Creator Agent
 - Searches Serper.dev Google Images for a story-relevant image
 - Generates carousel PNG slides locally using **Pillow** (no Canva)
-- Design system: "UncoverAI" — 1080×1350px, black bg, neon periwinkle accent (#8075FF), Anton + Inter fonts
+- Design system: "UncoverAI" — 1080×1350px, dark navy bg (#1A1A2E), neon periwinkle accent (#8075FF), Anton + Inter fonts
 - Slide structure (6–10+ slides):
   - Slide 1 — Cover: story image + "DO YOU KNOW" pill + bold headline (word-level accent alternation)
-  - Slide 2 — Hook Stat: large accent number + white context label + "SWIPE TO FIND OUT WHY"
+  - Slide 2 — Hook Stat: large accent number + white context label (standalone — works without slide 1)
   - Slide 3+ — Content: numbered stat bullets (accent numbers, white text), max 4 per slide, as many slides as needed
-  - Second-to-last slide — Read More: "READ MORE" in accent + source URL (only when story.url is present)
-  - Last slide — CTA: "FOLLOW FOR MORE" + "@TECHWITHHAREEN" in accent
-- LLM is prompted to generate 8–12 key_stats per story (was 3–6); renderer chunks them into content slides automatically
-- Slides saved as PNGs to `/tmp/carousel_{id}/`
-- Returns `CarouselResult` with `file://` URLs
+  - Second-to-last slide — Read More: "LINK IN DESCRIPTION" (accent + white) — no URL on slide; URL in caption only
+  - Last slide — CTA: "SEND THIS TO SOMEONE" + "@TECHWITHHAREEN" in accent
+- LLM is prompted to generate 8–12 key_stats per story; renderer chunks them into content slides automatically
+- Slides saved as PNGs to `/tmp/carousel_{id}/`, uploaded to GCS
+- Returns `CarouselResult` with GCS `https://` URLs + `image_url` (for re-render)
 
 ### Caption Writer Agent
 - Dedicated agent for Instagram captions
 - Uses `anthropic.AsyncAnthropic` (async client — not sync)
 - System/user prompt split for prompt injection hardening
-- Persona instruction adapts tone to story type (product launch, funding, research, general)
+- **Hareen's voice** — 4 story type modes with distinct tone:
+  - `tool_feature` → Translator ("Okay this one's actually useful...")
+  - `funding_acquisition` → Contrarian ("Let's be real — $X doesn't mean...")
+  - `research_finding` → Accessible + actionable ("This one's worth your time...")
+  - `general_news` → Conversational analyst ("What this really signals is...")
 - Output format:
   ```
-  [Hook line — tone adapted to story type]
-  [3-4 sentence summary of the story]
-  [CTA — e.g., "Save this post 🔖"]
+  [Hook line — Hareen's direct take, ≤120 chars, complete sentence]
+  [3-4 sentences — Hareen's opinionated take, NOT a neutral summary]
+  [CTA — "Send this to someone who needs to see it 👇" (primary) or "Save this post 🔖"]
   [Link in Description 🔗\n<url>  ← only when story.url is present]
-  [15-20 AI-generated hashtags]
+  [3-5 story-specific hashtags]
   ```
+- `story_type` field logged for observability
 
 ### Post Analyzer Agent
 - Checks every post before it reaches the user:
@@ -84,7 +100,7 @@ The system has two entry points:
 
 ### Publishing Module (stub)
 - Manual export — owner downloads PNGs and posts to Instagram manually
-- Instagram Graph API not integrated (deferred to v3)
+- Instagram Graph API not integrated (deferred to v5+)
 - Triggered on Telegram or Web UI approval
 
 ## Pipeline Flow
@@ -98,10 +114,10 @@ Gmail Pub/Sub (rundownai arrives)
             ↓ (per story, parallel)
 [Post Creator Agent]
  - Serper image search → download image
- - Pillow PNG renderer → 4-7 slides
+ - Pillow PNG renderer → 6-10+ slides
             ↓
 [Caption Writer Agent]
- - Hook + summary + CTA + hashtags
+ - Hareen's voice hook + opinionated body + DM-share CTA + 3-5 hashtags
             ↓
 [Post Analyzer Agent]
  - Quality check → 1 auto-retry → skip + alert if still failing
@@ -130,10 +146,10 @@ POST /api/v2/research
             ↓ (per story, parallel)
 [Same v1 pipeline: Post Creator → Caption Writer → Post Analyzer]
             ↓
-Firestore /posts collection (pending approval)
+Firestore /posts collection (pending approval) — includes render_data for re-render
             ↓
 Web UI approval queue
- - Approve / Reject / Edit caption
+ - Approve / Reject / Edit caption / Edit slides (reorder, delete, re-render)
  - Optional: also send to Telegram
             ↓
 [Publishing Module — manual]
@@ -157,7 +173,8 @@ Web UI approval queue
 | Decision | Choice |
 |---|---|
 | Carousel creation | Pillow PNG renderer — no Canva, fully local; GCS uploads parallelised with asyncio.gather |
-| Design system | "UncoverAI" — black bg, neon periwinkle (#8075FF), Anton + Inter fonts |
+| Design system | "UncoverAI" — dark navy bg (#1A1A2E), neon periwinkle (#8075FF), Anton + Inter fonts |
+| Background colour | #1A1A2E (not pure #000000 — causes halation) |
 | LLM API | Direct Anthropic API key — no Vertex AI |
 | Image search | Serper.dev Google Images |
 | Research APIs | Exa.ai (semantic) + Tavily (deep extraction) + Serper (Google News) |
@@ -168,9 +185,13 @@ Web UI approval queue
 | Firestore mode | Native mode (not Datastore mode, not Bigtable) — free tier, well within limits |
 | Firestore status filtering | Client-side filtering only — no composite index on (status, created_at) |
 | Slide count | 8–12 key_stats per story → 6–10+ slides; renderer chunks 4 stats per content slide |
+| Hashtag count | 3–5 per post (Instagram Dec 2025 cap — 15-20 is penalised) |
+| CTA strategy | DM-share primary ("Send this to someone") + mid-carousel bookmark soft CTA |
+| Read More slide | "LINK IN DESCRIPTION" only — no URL on slide; URL lives in caption |
 | Vercel SPA routing | vercel.json rewrite `/(.*) → /index.html`; .npmrc legacy-peer-deps for Vite 8 compat |
 | GitHub repos | Backend: github.com/EdlaHareen/techwithhareen-backend — Frontend: github.com/EdlaHareen/techwithhareen-web |
 | Telegram caption | Full caption sent as separate message (not inline) — Telegram caps inline captions at 1024 chars |
+| render_data | Stored in Firestore per post — enables slide re-render from web UI |
 
 ## Key Constraints
 
@@ -179,6 +200,22 @@ Web UI approval queue
 - **Publish immediately** on approval, no scheduling
 - **Skip + alert** on failure (no complex retry loops)
 - **No deduplication** on v1 — trust rundownai not to repeat stories
+- **Hashtags: 3–5 max** — Instagram Dec 2025 algorithm cap
+
+## v4 Roadmap (docs/BRD-v4.md + docs/PRD-v4.md)
+
+### Phase 1 — Algorithm Compliance (next to build)
+- F1.1: Hashtags 3–5 enforced in caption writer
+- F1.2: Background colour #1A1A2E in renderer
+- F1.3: Two-CTA strategy (mid-carousel bookmark slide + DM-share final CTA)
+- F1.4: Caption first 125 chars as standalone hook
+- F1.5: Slide 2 standalone hook (remove "SWIPE TO FIND OUT WHY")
+
+### Phase 2 — Content Engine
+- F2.1: Content type classifier (breaking_news / tool_review / research_finding / opinion_hot_take / evergreen_explainer)
+- F2.2: Reels Script Agent — writes 15–60s scripts for Hareen to record
+- F2.3: Recurring series templates (Monday roundup / Wednesday "Worth It or Hype?" / Friday Hot Take)
+- F2.4: Stories pipeline — 3 Story cards (1080×1920) per approved post
 
 ## Key Files
 
@@ -189,24 +226,30 @@ src/
     research_orchestrator/  — Exa + Tavily + Serper + LLM synthesis (v2)
     content_validator/      — relevance/freshness/dedup checks (v2)
     post_creator/           — Pillow carousel generator + image fetcher
-    caption_writer/         — Instagram caption LLM agent
+    caption_writer/         — Instagram caption LLM agent (Hareen's voice, 4 story types)
     post_analyzer/          — 5-check quality gate with auto-retry
     telegram_bot/           — aiogram bot, approval flow
   orchestrator/
     handler.py              — InstaHandlerManager, parallel per-story pipeline
   api/
     routes_v1.py            — Gmail webhook, Telegram webhook, test endpoints
-    routes_v2.py            — Web UI research, job polling, post approval queue
+    routes_v2.py            — Web UI research, job polling, post approval, slide editor
   utils/
     story.py                — shared Story dataclass (v1 + v2)
     carousel_renderer.py    — Pillow PNG slide generator (UncoverAI design)
     carousel_service.py     — async wrapper: image download + render + CarouselResult
-    carousel_result.py      — CarouselResult dataclass
-    firestore_client.py     — Firestore CRUD (jobs, posts, failures, gmail state)
+    carousel_result.py      — CarouselResult dataclass (includes image_url for re-render)
+    firestore_client.py     — Firestore CRUD (jobs, posts, failures, gmail state, slide ops)
     gmail_client.py         — OAuth2 Gmail service, Pub/Sub decoder
   publishing/
     publisher.py            — manual export stub
   main.py                   — FastAPI app, CORS, router registration
+docs/
+  BRD-v4.md                 — Business Requirements Document for v4
+  PRD-v4.md                 — Product Requirements Document for v4 (5 features, 2 phases)
+  insta-playbook.md         — Deep research: Instagram AI/tech creator best practices 2025
+  HANDBOOK.md               — General project handbook
 
 # Frontend: /Users/hareenedla/Hareen/techwithhareen-web (separate repo)
+# Components: PostCard, SlideEditorModal (two-tab: content edit + manage slides)
 ```
