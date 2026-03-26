@@ -13,7 +13,7 @@
 
 ### Phase Summary
 
-- [ ] **Phase 1: Algorithm Compliance** - Fix hashtag count, background colour, CTA slides, caption hook, and Slide 2 hook to match Instagram best practices
+- [x] **Phase 1: Algorithm Compliance** - Fix hashtag count, background colour, CTA slides, caption hook, and Slide 2 hook to match Instagram best practices (completed 2026-03-26)
 - [ ] **Phase 2: Content Classification** - Add a 3-type content classifier that runs before carousel creation and surfaces in the web UI
 - [ ] **Phase 3: Reels Script Agent** - On-demand Reel script generation with Hareen's voice, all 3 content types, 4 target lengths, per-segment structure
 - [ ] **Phase 4: Series + Stories** - "This Week in AI" roundup template and on-demand Story teaser card generation
@@ -73,7 +73,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Algorithm Compliance | 0/2 | Not started | - |
+| 1. Algorithm Compliance | 2/2 | Complete   | 2026-03-26 |
 | 2. Content Classification | 0/? | Not started | - |
 | 3. Reels Script Agent | 0/? | Not started | - |
 | 4. Series + Stories | 0/? | Not started | - |

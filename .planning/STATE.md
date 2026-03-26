@@ -10,24 +10,24 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 1 of 4 (Algorithm Compliance)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-25 — v4.0 roadmap created; v3 shipped (slide editor, Hareen voice captions, Read More fix)
+Plan: 2 of ? in current phase
+Status: In progress
+Last activity: 2026-03-26 — Plan 01-02 complete: caption writer and post analyzer updated for Instagram Dec 2025 algorithm (3-5 hashtags, 120-char hook, DM-share primary CTA)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: -
+- Total plans completed: 1
+- Average duration: 3 min
+- Total execution time: 3 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-algorithm-compliance | 1 | 3 min | 3 min |
 
 *Updated after each plan completion*
 
@@ -42,6 +42,9 @@ Recent decisions affecting v4 work (full log in PROJECT.md):
 - Stories: teaser card only for v4 — poll/insight cards deferred to v5 (need 5K+ community)
 - Hashtags: cap at 3–5 (Instagram Dec 2025 algorithm; 15–20 delivered negligible extra reach)
 - v1–v3 all shipped and live, no regressions
+- [01-01] BG constant (26,26,46) replaces BLACK — sole remaining black draw call uses literal (0,0,0) for text-on-accent contrast
+- [01-01] Bookmark threshold set to len(stat_chunks) >= 2 — maps cleanly to 8+ slide carousels
+- [01-01] Slide numbering uses len(slides)+1 dynamically — eliminates off-by-one when bookmark is conditionally injected
 
 ### Pending Todos
 
@@ -53,6 +56,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25
-Stopped at: Roadmap created for v4.0; ready to plan Phase 1
+Last session: 2026-03-26
+Stopped at: Completed 01-algorithm-compliance plan 01-01 (carousel renderer fixes)
 Resume file: None
