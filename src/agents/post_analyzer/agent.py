@@ -4,7 +4,7 @@ Post Analyzer Agent — quality gate before posts reach the owner on Telegram.
 Runs 5 checks concurrently:
   1. DesignCheck   — brand name + website replaced on all slides
   2. HookCheck     — cover slide has a strong question hook
-  3. HashtagCheck  — ≥10 hashtags, at least 3 niche ones
+  3. HashtagCheck  — 3–5 hashtags (Instagram Dec 2025 cap: 15-20 suppresses reach)
   4. CaptionCheck  — hook + body + CTA all present
   5. CTACheck      — last slide has CTA text
 
@@ -111,6 +111,9 @@ class PostAnalyzerAgent:
         if not caption.hook or len(caption.hook.strip()) < 10:
             issues.append("Caption hook is missing or too short")
             fixes.append("Rewrite the caption hook to be a punchy, attention-grabbing sentence")
+        if caption.hook and len(caption.hook.strip()) > 120:
+            issues.append(f"Hook is {len(caption.hook.strip())} chars — must be ≤120 for Instagram feed preview (truncates at 125)")
+            fixes.append("Shorten hook to ≤120 characters — keep it as a complete sentence, cut filler words")
 
         # Use LLM to evaluate hook quality
         prompt = f"""Rate this Instagram hook line for quality on a scale of 1-10.
@@ -143,15 +146,12 @@ Respond with JSON: {{"score": <1-10>, "issue": "<one sentence issue or null>"}}"
         fixes = []
 
         count = len(caption.hashtags)
-        if count < 10:
-            issues.append(f"Only {count} hashtags — need at least 10")
-            fixes.append("Add more hashtags: mix of broad (#AI, #Tech) and niche story-specific tags")
-
-        # Check for at least 3 niche hashtags (longer than 8 chars usually = niche)
-        niche = [h for h in caption.hashtags if len(h) > 9]
-        if len(niche) < 3:
-            issues.append(f"Only {len(niche)} niche hashtags — need at least 3")
-            fixes.append("Add 3+ story-specific hashtags (e.g., #MicrosoftCopilot, #OpenAIGPT5)")
+        if count < 3:
+            issues.append(f"Only {count} hashtags — Instagram requires at least 3 (1 branded + 1-2 niche + 1 broad)")
+            fixes.append("Add hashtags to reach 3–5 total: include #techwithhareen + 1-2 niche + 1 broad")
+        if count > 5:
+            issues.append(f"{count} hashtags — Instagram Dec 2025 cap is 5 max; tag stuffing suppresses reach")
+            fixes.append("Trim hashtags to 3–5: keep #techwithhareen + 1-2 niche + 1-2 broad, remove the rest")
 
         # Check branded hashtag is present
         if "#techwithhareen" not in [h.lower() for h in caption.hashtags]:
@@ -179,7 +179,7 @@ Respond with JSON: {{"score": <1-10>, "issue": "<one sentence issue or null>"}}"
 
         if not caption.cta or len(caption.cta.strip()) < 5:
             issues.append("No CTA in caption")
-            fixes.append("Add CTA to caption: 'Save this post 🔖' or 'Follow @techwithhareen'")
+            fixes.append("Add CTA: 'Send this to someone who needs to see it 👇' (primary) or 'Save this post 🔖'")
 
         # Note: Checking last slide CTA visually would require reading Canva slide content.
         # The template's slide 4 has CTA by design — so if carousel was created from
