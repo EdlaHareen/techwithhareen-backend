@@ -330,13 +330,11 @@ def _slide_hook_stat(hook_stat_value: str, hook_stat_label: str, total: int) -> 
                 break
 
         f_label = _font("anton", 72)
-        f_sub = _font("inter_sb", 34)
 
         num_h = _line_height(f_num) + 20   # extra breathing room below number
         label_h = _text_block_height(hook_stat_label, f_label, max_w, spacing=4) if hook_stat_label else 0
-        sub_h = _line_height(f_sub)
         gap = 28
-        block_h = num_h + (gap + label_h if hook_stat_label else 0) + gap + sub_h
+        block_h = num_h + (gap + label_h if hook_stat_label else 0)
         y = (H - block_h) // 2
 
         # Big accent number
@@ -349,12 +347,6 @@ def _slide_hook_stat(hook_stat_value: str, hook_stat_label: str, total: int) -> 
             y += gap
             _draw_text_block(draw, hook_stat_label, pad, y, f_label, WHITE, max_w, spacing=4, align="center")
             y += label_h
-
-        # Sub-label
-        y += gap
-        sub = "SWIPE TO FIND OUT WHY"
-        sw = int(draw.textlength(sub, font=f_sub))
-        draw.text(((W - sw) // 2, y), sub, font=f_sub, fill=GRAY)
 
     else:
         # Fallback: accent bg with generic teaser
@@ -478,6 +470,40 @@ def _slide_read_more(url: str, slide_num: int, total: int) -> Image.Image:
     return img
 
 
+def _slide_bookmark(slide_num: int, total: int) -> Image.Image:
+    """
+    Mid-carousel bookmark slide — inserted when total slides >= 8.
+    Accent bg with 'BOOKMARK THIS' in large white Anton type.
+    Reinforces save behaviour mid-scroll.
+    """
+    img = Image.new("RGB", (W, H), ACCENT)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+    f = _font("anton", 118)
+    f_sub = _font("inter_sb", 40)
+
+    h1 = _text_block_height("BOOKMARK", f, max_w, 0)
+    h2 = _text_block_height("THIS", f, max_w, 0)
+    h3 = _line_height(f_sub)
+    gap = 20
+    total_h = h1 + gap + h2 + gap + h3
+    y = (H - total_h) // 2
+
+    _draw_text_block(draw, "BOOKMARK", pad, y, f, WHITE, max_w, spacing=0, align="center")
+    y += h1 + gap
+    _draw_text_block(draw, "THIS", pad, y, f, (0, 0, 0), max_w, spacing=0, align="center")
+    y += h2 + gap
+    sub = "SAVE THIS FOR LATER"
+    sw = int(draw.textlength(sub, font=f_sub))
+    draw.text(((W - sw) // 2, y), sub, font=f_sub, fill=WHITE)
+
+    return img
+
+
 def _slide_cta(total: int) -> Image.Image:
     """
     Slide 4 — CTA (evergreen).
@@ -494,7 +520,7 @@ def _slide_cta(total: int) -> Image.Image:
     pad = 44
     max_w = W - 2 * pad
 
-    lines_big = ["FOLLOW", "FOR MORE"]
+    lines_big = ["SEND THIS TO", "SOMEONE"]
     h_big = sum(_text_block_height(l, f_big, max_w, 0) for l in lines_big) + 10
     h_handle = _text_block_height("@TECHWITHHAREEN", f_handle, max_w, 0)
     gap = 32
@@ -548,7 +574,13 @@ def render_carousel(
             stat_chunks.append(chunk)
 
     has_read_more = bool(source_url)
-    total = 2 + len(stat_chunks) + (1 if has_read_more else 0) + 1
+
+    # Determine if a mid-carousel bookmark slide is needed
+    has_bookmark = len(stat_chunks) >= 2  # 8+ total slides means 2+ content slides
+    bookmark_after_chunk = len(stat_chunks) // 2  # insert after halfway content slide
+
+    # Recalculate total including bookmark slide
+    total = 2 + len(stat_chunks) + (1 if has_bookmark else 0) + (1 if has_read_more else 0) + 1
 
     slides: list[Image.Image] = [
         _slide_cover(headline, image_bytes, total),
@@ -556,10 +588,13 @@ def render_carousel(
     ]
     start_num = 0
     for idx, chunk in enumerate(stat_chunks):
-        slides.append(_slide_content(chunk, 3 + idx, total, start_num=start_num))
+        slides.append(_slide_content(chunk, len(slides) + 1, total, start_num=start_num))
         start_num += len(chunk)
+        # Insert bookmark slide after the halfway content slide
+        if has_bookmark and idx == bookmark_after_chunk - 1:
+            slides.append(_slide_bookmark(len(slides) + 1, total))
     if has_read_more:
-        slides.append(_slide_read_more(source_url, total - 1, total))
+        slides.append(_slide_read_more(source_url, len(slides) + 1, total))
     slides.append(_slide_cta(total))
 
     paths = []
