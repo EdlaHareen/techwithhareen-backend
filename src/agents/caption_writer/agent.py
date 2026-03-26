@@ -4,9 +4,10 @@ Caption Writer Agent — generates Instagram captions for each story.
 Output format (strictly enforced):
   1. Hook line (punchy, no emoji) — tone adapted to story type
   2. 3-4 sentence summary
-  3. CTA ("Save this post 🔖" or "Follow @techwithhareen for daily AI updates")
+  3. CTA — DM-share primary ("Send this to someone who needs to see it 👇") for news/tool stories;
+           save CTA ("Save this post 🔖") for research/general_news
   4. Source link (if available): "Link in Description 🔗\n<url>"
-  5. 15-20 AI/tech/startup hashtags (mix of high-volume + niche + branded)
+  5. 3–5 hashtags: 1 branded (#techwithhareen) + 1–2 niche + 1–2 broad (Instagram Dec 2025 cap)
 """
 
 import json
@@ -23,10 +24,7 @@ logger = logging.getLogger(__name__)
 
 INSTAGRAM_MAX_CAPTION_LENGTH = 2200
 
-BASE_HASHTAGS = [
-    "#AI", "#ArtificialIntelligence", "#Tech", "#Technology",
-    "#Startups", "#Innovation", "#techwithhareen",
-]
+_FALLBACK_HASHTAGS = ["#techwithhareen", "#AI", "#Tech"]
 
 _PERSONA_INSTRUCTION = """You are writing as Hareen — a real person with a point of view, not an information card.
 
@@ -89,13 +87,17 @@ class Caption:
         issues = []
         if not self.hook or len(self.hook.strip()) < 10:
             issues.append("Hook line is missing or too short")
+        if self.hook and len(self.hook.strip()) > 120:
+            issues.append(f"Hook is {len(self.hook.strip())} chars — must be ≤120 for Instagram preview truncation")
         sentences = [s.strip() for s in self.body.split(".") if s.strip()]
         if len(sentences) < 3:
             issues.append(f"Body has only {len(sentences)} sentences — need at least 3")
         if not self.cta:
             issues.append("CTA is missing")
-        if len(self.hashtags) < 10:
-            issues.append(f"Only {len(self.hashtags)} hashtags — need at least 10")
+        if len(self.hashtags) < 3:
+            issues.append(f"Only {len(self.hashtags)} hashtags — need at least 3")
+        if len(self.hashtags) > 5:
+            issues.append(f"{len(self.hashtags)} hashtags — Instagram Dec 2025 cap is 5 max")
         if len(self.full_text) > INSTAGRAM_MAX_CAPTION_LENGTH:
             issues.append(f"Caption is {len(self.full_text)} chars — exceeds Instagram 2,200 limit")
         return len(issues) == 0, issues
@@ -137,18 +139,18 @@ class CaptionWriterAgent:
 Return a JSON object with these exact fields:
 {{
   "story_type": "one of: tool_feature | funding_acquisition | research_finding | general_news",
-  "hook": "One punchy sentence — Hareen's direct take, not a headline rewrite. No emoji. No hashtags.",
+  "hook": "One punchy sentence — Hareen's direct take, not a headline rewrite. No emoji. No hashtags. MUST be ≤120 characters and a grammatically complete sentence that makes sense on its own (Instagram truncates captions at 125 chars in feed preview).",
   "body": "3-4 sentences written as Hareen's opinionated take. Follow the voice mode for the story_type above. The opinion IS the content — do not write a neutral summary.",
-  "cta": "Either 'Save this post 🔖' or 'Follow @techwithhareen for daily AI updates ⚡'",
-  "hashtags": ["#AI", "#Tech", ... 15-20 total hashtags mixing high-volume + niche + branded]
+  "cta": "Primary: 'Send this to someone who needs to see it 👇' — use this for news_and_announcements and tool_and_product stories. For research_finding or general_news where insight-saving matters more, use 'Save this post 🔖'",
+  "hashtags": ["#techwithhareen", "#AI", "#OpenAI"]  // exactly 3–5 tags: 1 branded + 1-2 niche + 1-2 broad
 }}{source_url_instruction}
 
-Hashtag rules:
-- Include 3-4 story-specific niche tags (e.g., #MicrosoftCopilot, #OpenAI, #AIStartups)
-- Include 5-6 mid-volume tags (#AITools, #TechNews, #FutureOfWork, #MachineLearning)
-- Include 3-4 broad tags (#AI, #Tech, #Innovation, #Startups)
-- Always include #techwithhareen
-- Total: 15-20 hashtags
+Hashtag rules (Instagram Dec 2025 algorithm — 15-20 tags suppresses reach):
+- Total: exactly 3–5 hashtags
+- REQUIRED: always include #techwithhareen (branded)
+- Include 1–2 story-specific niche tags (e.g., #OpenAI, #AIStartups, #MicrosoftCopilot)
+- Include 1–2 broad category tags (e.g., #AI, #Tech, #Innovation)
+- Do NOT include more than 5 hashtags — the algorithm penalises tag stuffing
 
 Return ONLY valid JSON."""
 
@@ -178,7 +180,7 @@ Return ONLY valid JSON."""
                 hook=data.get("hook", "").strip(),
                 body=data.get("body", "").strip(),
                 cta=data.get("cta", "Follow @techwithhareen for daily AI updates ⚡").strip(),
-                hashtags=data.get("hashtags", BASE_HASHTAGS),
+                hashtags=data.get("hashtags", _FALLBACK_HASHTAGS),
                 source_url=story.url,
                 story_type=data.get("story_type", "general_news"),
             )
@@ -198,6 +200,6 @@ Return ONLY valid JSON."""
                 hook=story.headline,
                 body=story.summary,
                 cta="Follow @techwithhareen for daily AI updates ⚡",
-                hashtags=BASE_HASHTAGS,
+                hashtags=_FALLBACK_HASHTAGS,
                 source_url=story.url,
             )
