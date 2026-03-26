@@ -1,0 +1,108 @@
+# Requirements: techwithhareen Instagram Agent System
+
+**Defined:** 2026-03-25
+**Core Value:** Every approved post sounds like Hareen — opinionated, direct, signal-not-noise — with zero extra effort beyond the approval click.
+
+## v4 Requirements
+
+### Algorithm Compliance
+
+- [ ] **ALGO-01**: System generates exactly 3–5 hashtags per post (1 branded + 1–2 niche + 1 broad category)
+- [ ] **ALGO-02**: All carousel slides render with `#1A1A2E` background (not `#000000`)
+- [ ] **ALGO-03**: Carousels with 8+ slides include a mid-carousel bookmark slide ("BOOKMARK THIS")
+- [ ] **ALGO-04**: Final CTA slide says "SEND THIS TO SOMEONE" (not "FOLLOW FOR MORE")
+- [ ] **ALGO-05**: Caption DM-share CTA is primary for news_and_announcements and tool_and_product stories
+- [ ] **ALGO-06**: Caption hook is ≤ 120 chars and a grammatically complete standalone sentence
+- [ ] **ALGO-07**: Slide 2 hook stat is a complete self-contained statement — "SWIPE TO FIND OUT WHY" removed
+
+### Content Classification
+
+- [ ] **CLASS-01**: Every story receives a `content_type` field: `news_and_announcements` / `tool_and_product` / `educational`
+- [ ] **CLASS-02**: Classification runs before carousel creation and informs template, caption voice, and CTA
+- [ ] **CLASS-03**: Web UI displays content type badge on each post card
+
+### Reels Script Agent
+
+- [ ] **REEL-01**: "Generate Reel Script" button on each PostCard (on-demand, not auto-generated)
+- [ ] **REEL-02**: Agent generates scripts for all 3 content types at 15 / 30 / 45 / 60s target lengths
+- [ ] **REEL-03**: Default script length is content-type-driven (news=30s, tool=30s, educational=45s); Hareen can override
+- [ ] **REEL-04**: Each segment has `spoken_text`, `on_screen_text`, `overlay_type` (anchor/contrast/reinforcement), `duration_seconds`
+- [ ] **REEL-05**: Scripts are ≤ target word count at 150 wpm (30s=75 words, 45s=112 words, 60s=150 words)
+- [ ] **REEL-06**: Scripts stored in Firestore per post; web UI shows script in a modal with copy-per-segment
+- [ ] **REEL-07**: Script language follows Hareen's voice rules — no passive voice, no filler, spoken phrases not sentences
+
+### Series Templates
+
+- [ ] **SERIES-01**: "This Week in AI" roundup carousel template exists in the renderer
+- [ ] **SERIES-02**: Hareen can select multiple posts from History page and trigger roundup assembly
+- [ ] **SERIES-03**: Roundup carousel renders: Cover → 5–7 story tiles (stat + implication per tile) → CTA slide
+- [ ] **SERIES-04**: Web UI shows series badge on post cards assigned to a series
+
+### Stories Pipeline
+
+- [ ] **STORY-01**: "Generate Story Card" button on each PostCard (on-demand)
+- [ ] **STORY-02**: Generates 1 teaser card: 1080×1920px, hook stat in large Anton type, `#8075FF` accent bg, `@techwithhareen` watermark
+- [ ] **STORY-03**: Story card stored in GCS + Firestore; downloadable from web UI
+
+## v5 Backlog (deferred)
+
+### Series Extensions
+- **SERIES-V5-01**: "Worth It or Hype?" series template
+- **SERIES-V5-02**: "Hot Take" Reel-primary series
+
+### Stories Extensions
+- **STORY-V5-01**: Key insight card (Story card type 2)
+- **STORY-V5-02**: Engagement/poll card (Story card type 3) — needs 5K+ follower community for poll ROI
+- **STORY-V5-03**: `opinion_hot_take` classifier type + manual entry point in web UI
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Instagram Graph API publishing | Manual export remains; Graph API integration is v5+ |
+| TikTok / YouTube Shorts | Instagram-only scope for v4 |
+| Mixed-media carousels (image + video) | High complexity, deferred to v5 |
+| Scheduling / posting calendar | Manual posting; no scheduling needed |
+| Analytics ingestion | Deferred; no Instagram Insights API integration |
+| Broadcast Channels / Close Friends | Premature below 10K followers |
+| 5-type content classifier | 3-type system handles 85%+ of content with fewer misclassification edge cases |
+| Auto-generated Reel scripts (every post) | On-demand only — ties generation to recording intent |
+| Stories poll + insight cards | Need 5K+ community; poll response rates <2K produce noise, not signal |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| ALGO-01 | Phase 1 | Pending |
+| ALGO-02 | Phase 1 | Pending |
+| ALGO-03 | Phase 1 | Pending |
+| ALGO-04 | Phase 1 | Pending |
+| ALGO-05 | Phase 1 | Pending |
+| ALGO-06 | Phase 1 | Pending |
+| ALGO-07 | Phase 1 | Pending |
+| CLASS-01 | Phase 2 | Pending |
+| CLASS-02 | Phase 2 | Pending |
+| CLASS-03 | Phase 2 | Pending |
+| REEL-01 | Phase 3 | Pending |
+| REEL-02 | Phase 3 | Pending |
+| REEL-03 | Phase 3 | Pending |
+| REEL-04 | Phase 3 | Pending |
+| REEL-05 | Phase 3 | Pending |
+| REEL-06 | Phase 3 | Pending |
+| REEL-07 | Phase 3 | Pending |
+| SERIES-01 | Phase 4 | Pending |
+| SERIES-02 | Phase 4 | Pending |
+| SERIES-03 | Phase 4 | Pending |
+| SERIES-04 | Phase 4 | Pending |
+| STORY-01 | Phase 4 | Pending |
+| STORY-02 | Phase 4 | Pending |
+| STORY-03 | Phase 4 | Pending |
+
+**Coverage:**
+- v4 requirements: 24 total
+- Mapped to phases: 24
+- Unmapped: 0 ✓
+
+---
+*Requirements defined: 2026-03-25*
+*Last updated: 2026-03-25 after initial definition*
