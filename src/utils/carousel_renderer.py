@@ -2,17 +2,19 @@
 Carousel Renderer — Pillow-based PNG generator for @techwithhareen Instagram carousels.
 
 Design language: "UncoverAI" style
-  - Pure black background (#000000)
+  - Dark navy background (#1A1A2E)
   - Accent: neon periwinkle #8075FF
   - Font: Anton (heavy condensed) for headlines, Inter for body
   - Layout: top 50% = story image (with vignette), bottom 50% = massive ALL CAPS text
   - Word-level color alternation: key words in accent, rest in white
 
-Produces 4 slides at 1080×1350 (portrait 4:5):
-  Slide 1 — Cover:   Story image top + "DO YOU KNOW" label + bold headline bottom
-  Slide 2 — Teaser:  Full-bleed accent + "CHECK THE NEXT SLIDE"
-  Slide 3 — Content: Stat bullets (accent numbers, white text)
-  Slide 4 — CTA:     "FOLLOW @techwithhareen" call to action
+Produces 6–10+ slides at 1080×1350 (portrait 4:5):
+  Slide 1 — Cover:     Story image top + "DO YOU KNOW" label + bold headline bottom
+  Slide 2 — Hook Stat: Large accent number + white context label (standalone, no swipe prompt)
+  Slide 3+ — Content:  Stat bullets (accent numbers, white text), max 4 per slide
+  Mid-carousel — Bookmark: "BOOKMARK THIS" on accent bg (injected when total >= 8 slides)
+  Second-to-last — Read More: "LINK IN DESCRIPTION" — no URL on slide
+  Last — CTA: "SEND THIS TO SOMEONE" + "@TECHWITHHAREEN"
 """
 
 import io
@@ -30,7 +32,7 @@ logger = logging.getLogger(__name__)
 W, H = 1080, 1350
 
 # ── Palette ────────────────────────────────────────────────────────────────────
-BLACK   = (0, 0, 0)
+BG      = (26, 26, 46)      # #1A1A2E — dark navy (not pure black — avoids halation)
 WHITE   = (255, 255, 255)
 ACCENT  = (128, 117, 255)   # #8075FF — neon periwinkle
 GRAY    = (160, 160, 160)
@@ -177,7 +179,7 @@ def _draw_alternating(
 # ── Background & image helpers ─────────────────────────────────────────────────
 
 def _black_canvas() -> Image.Image:
-    return Image.new("RGB", (W, H), BLACK)
+    return Image.new("RGB", (W, H), BG)
 
 
 def _place_image_top(base: Image.Image, image_bytes: bytes, frac: float = 0.52) -> Image.Image:
@@ -366,7 +368,7 @@ def _slide_hook_stat(hook_stat_value: str, hook_stat_label: str, total: int) -> 
         h2 = _text_block_height("INSANE.", f, max_w, spacing=0)
         gap = 30
         y = (H - h1 - gap - h2) // 2
-        _draw_text_block(draw, "THIS IS", pad, y, f, BLACK, max_w, spacing=0, align="center")
+        _draw_text_block(draw, "THIS IS", pad, y, f, (0, 0, 0), max_w, spacing=0, align="center")
         y += h1 + gap
         _draw_text_block(draw, "INSANE.", pad, y, f, WHITE, max_w, spacing=0, align="center")
 
