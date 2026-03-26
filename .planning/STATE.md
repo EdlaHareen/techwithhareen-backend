@@ -1,33 +1,58 @@
-# State
+# Project State
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every approved post sounds like Hareen — opinionated, direct, signal-not-noise — with zero extra effort beyond the approval click.
-**Current focus:** Defining v4 milestone requirements
+**Current focus:** Phase 1 — Algorithm Compliance
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-25 — Milestone v4.0 started
+Phase: 1 of 4 (Algorithm Compliance)
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-03-25 — v4.0 roadmap created; v3 shipped (slide editor, Hareen voice captions, Read More fix)
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0
+- Average duration: -
+- Total execution time: -
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
-- v1–v3 all shipped and live. No regressions.
-- BRD-v4.md + PRD-v4.md written and committed in docs/
-- Deep research analysis completed (docs/v4-deepened-analysis.md) — verified algorithm claims, pruned Phase 2 scope
-- Key research finding: Reels Script Agent is highest ROI Phase 2 feature; Stories and Series scoped down significantly
+### Decisions
 
-## Decisions
+Recent decisions affecting v4 work (full log in PROJECT.md):
 
-- Classifier simplified to 3 types (not 5) — reduces misclassification edge cases
-- Reels Script on-demand only (not auto-generated per post)
-- Stories teaser card only for v4 (poll/insight cards deferred to v5, need 5K+ followers)
-- "This Week in AI" series only (other 2 series deferred pending Reels adoption data)
+- Classifier: 3 types only (news_and_announcements / tool_and_product / educational) — 5-type system had misclassification edge cases
+- Reels Script: on-demand per post, not auto-generated — ties generation to recording intent
+- Stories: teaser card only for v4 — poll/insight cards deferred to v5 (need 5K+ community)
+- Hashtags: cap at 3–5 (Instagram Dec 2025 algorithm; 15–20 delivered negligible extra reach)
+- v1–v3 all shipped and live, no regressions
 
-## Blockers
+### Pending Todos
 
-(none)
+None yet.
+
+### Blockers/Concerns
+
+None yet.
+
+## Session Continuity
+
+Last session: 2026-03-25
+Stopped at: Roadmap created for v4.0; ready to plan Phase 1
+Resume file: None
