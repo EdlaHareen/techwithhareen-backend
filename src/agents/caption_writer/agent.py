@@ -179,7 +179,7 @@ Return ONLY valid JSON."""
             caption = Caption(
                 hook=data.get("hook", "").strip(),
                 body=data.get("body", "").strip(),
-                cta=data.get("cta", "Follow @techwithhareen for daily AI updates ⚡").strip(),
+                cta=data.get("cta", "Send this to someone who needs to see it 👇").strip(),
                 hashtags=data.get("hashtags", _FALLBACK_HASHTAGS),
                 source_url=story.url,
                 story_type=data.get("story_type", "general_news"),
@@ -199,7 +199,7 @@ Return ONLY valid JSON."""
             return Caption(
                 hook=story.headline,
                 body=story.summary,
-                cta="Follow @techwithhareen for daily AI updates ⚡",
+                cta="Send this to someone who needs to see it 👇",
                 hashtags=_FALLBACK_HASHTAGS,
                 source_url=story.url,
             )
