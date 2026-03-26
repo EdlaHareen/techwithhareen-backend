@@ -7,12 +7,12 @@
 
 ### Algorithm Compliance
 
-- [ ] **ALGO-01**: System generates exactly 3–5 hashtags per post (1 branded + 1–2 niche + 1 broad category)
+- [x] **ALGO-01**: System generates exactly 3–5 hashtags per post (1 branded + 1–2 niche + 1 broad category)
 - [x] **ALGO-02**: All carousel slides render with `#1A1A2E` background (not `#000000`)
 - [x] **ALGO-03**: Carousels with 8+ slides include a mid-carousel bookmark slide ("BOOKMARK THIS")
 - [x] **ALGO-04**: Final CTA slide says "SEND THIS TO SOMEONE" (not "FOLLOW FOR MORE")
-- [ ] **ALGO-05**: Caption DM-share CTA is primary for news_and_announcements and tool_and_product stories
-- [ ] **ALGO-06**: Caption hook is ≤ 120 chars and a grammatically complete standalone sentence
+- [x] **ALGO-05**: Caption DM-share CTA is primary for news_and_announcements and tool_and_product stories
+- [x] **ALGO-06**: Caption hook is ≤ 120 chars and a grammatically complete standalone sentence
 - [x] **ALGO-07**: Slide 2 hook stat is a complete self-contained statement — "SWIPE TO FIND OUT WHY" removed
 
 ### Content Classification
@@ -73,12 +73,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ALGO-01 | Phase 1 | Pending |
+| ALGO-01 | Phase 1 | Complete |
 | ALGO-02 | Phase 1 | Complete |
 | ALGO-03 | Phase 1 | Complete |
 | ALGO-04 | Phase 1 | Complete |
-| ALGO-05 | Phase 1 | Pending |
-| ALGO-06 | Phase 1 | Pending |
+| ALGO-05 | Phase 1 | Complete |
+| ALGO-06 | Phase 1 | Complete |
 | ALGO-07 | Phase 1 | Complete |
 | CLASS-01 | Phase 2 | Pending |
 | CLASS-02 | Phase 2 | Pending |
