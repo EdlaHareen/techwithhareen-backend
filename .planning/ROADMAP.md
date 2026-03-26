@@ -30,7 +30,11 @@
   3. Carousels with 8+ slides include a mid-carousel "BOOKMARK THIS" slide; all final CTA slides say "SEND THIS TO SOMEONE"
   4. Every caption hook is ≤ 120 characters and a grammatically complete sentence that makes sense without reading the rest of the caption
   5. Slide 2 contains a complete self-contained stat statement — the phrase "SWIPE TO FIND OUT WHY" does not appear on any slide
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Carousel renderer: #1A1A2E background, BOOKMARK THIS mid-slide, SEND THIS TO SOMEONE CTA, remove SWIPE TO FIND OUT WHY
+- [ ] 01-02-PLAN.md — Caption writer + post analyzer: 3-5 hashtag cap, ≤120-char hook enforcement, DM-share primary CTA
 
 ### Phase 2: Content Classification
 **Goal**: Every story is automatically labelled with one of three content types before carousel creation, so templates, caption voice, and CTAs are driven by the type of content rather than generic defaults.
@@ -69,10 +73,11 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Algorithm Compliance | 0/? | Not started | - |
+| 1. Algorithm Compliance | 0/2 | Not started | - |
 | 2. Content Classification | 0/? | Not started | - |
 | 3. Reels Script Agent | 0/? | Not started | - |
 | 4. Series + Stories | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-25 for v4.0 milestone*
+*Phase 1 plans written: 2026-03-25*
