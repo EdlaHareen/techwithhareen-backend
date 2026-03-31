@@ -52,6 +52,10 @@ Recent decisions affecting v4 work (full log in PROJECT.md):
 - [05-01] ResearchRequest.content_type uses Literal["news","educational"] — strict API boundary; internal Story stays flexible
 - [05-01] create_post stores content_type=None for news posts, "educational" for educational — avoids polluting existing news Firestore docs
 - [05-01] Educational branch calls run_educational stub that raises AttributeError until Plan 02 — acceptable; news path unaffected
+- [05-02] run_educational() sets story.content_type='educational' at public entry point (not inside synthesis) — keeps _synthesise_educational a pure data transformation
+- [05-02] _slide_learn_preview uses stats[:4] for bullets — consistent with 4-per-slide content slide limit throughout the renderer
+- [05-02] hook_stat_value and hook_stat_label forced to "" in educational synthesis prompt and Story constructor — educational stories never render hook stat slide
+- [05-02] content_type param added after source_url in both render_carousel and create_carousel — no positional call site breakage; default "news" preserves all existing callers
 - [05-03] BytesIO buffer for PDF rendering — no /tmp writes, clean Cloud Run serverless compatibility
 - [05-03] Font registration at module load (_register_fonts() at import time) — avoids per-render TTF parsing; graceful Helvetica fallback
 - [05-03] dm_keyword normalized post-LLM-generation with .upper()[:8] to guard against non-compliant output
@@ -67,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-31
-Stopped at: Completed 05-educational-pipeline plan 05-03 (PDFGuideAgent — ReportLab BytesIO PDF render, LLM-generated dm_keyword, GCS upload to guides/{slug}.pdf)
+Stopped at: Completed 05-educational-pipeline plan 05-02 (run_educational + _synthesise_educational in ResearchOrchestrator; _slide_learn_preview + content_type threading in carousel renderer and service)
 Resume file: None
