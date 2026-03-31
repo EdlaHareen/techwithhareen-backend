@@ -55,6 +55,7 @@ class PostCreatorAgent:
             hook_stat_label=story.hook_stat_label,
             source_url=story.url,
             content_type=content_type,
+            carousel_format=story.carousel_format,
         )
 
         if result.success:
