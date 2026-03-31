@@ -8,7 +8,7 @@ The system has two entry points:
 - **v1** — reads the daily rundownai newsletter from Gmail, creates carousel posts, writes captions, analyzes quality, and sends to the owner via Telegram for approval
 - **v2** — owner types any topic in a web UI, parallel research agents gather content, and the same pipeline produces posts for approval in the browser
 
-**Current version: v4 Phase 1 + v5 Phase 1 shipped.**
+**Current version: v4 Phase 1 + v5 Phase 1 shipped. v5 Phase 2 (Educational Redesign) in progress.**
 
 ## Version History
 
@@ -19,6 +19,7 @@ The system has two entry points:
 | v3 | ✅ Live | Slide editor, personal-voice captions (Hareen's tone), Read More → "LINK IN DESCRIPTION" |
 | v4 Phase 1 | ✅ Shipped | Algorithm compliance: 3–5 hashtags, #1A1A2E bg, BOOKMARK THIS mid-slide, SEND THIS TO SOMEONE CTA, 120-char hook, Slide 2 standalone stat |
 | v5 Phase 1 | ✅ Shipped | Educational content pipeline: "Educational" toggle in Web UI, lesson-step carousel, PDF Guide Agent (ReportLab + GCS), auto DM keyword, educational caption voice |
+| v5 Phase 2 | 🔧 In Progress | Educational redesign: TopicClarifierAgent (thinking model, 3–5 dynamic questions) + 3 carousel formats (A: Mistakes→Right Way, B: Pillars, C: Cheat Sheet). Branch: `feat/educational-carousel-clarifier-formats` |
 | v4 Phases 2–4 | 🔲 Planned | Content classifier, Reels Script Agent, Series + Stories |
 
 ## Agent Architecture
@@ -49,8 +50,21 @@ The system has two entry points:
 - Freshness check — flags stories older than 30 days
 - Deduplication — drops same-angle stories within a batch
 - Non-blocking: failing stories are logged, others continue
+- **Skipped for educational posts** — single-topic, pre-authored story
 
-### PDF Guide Agent (v5 — new)
+### Topic Clarifier Agent (v5 Phase 2 — in progress)
+- Triggered for `content_type="educational"` posts, runs BEFORE research
+- `POST /api/v2/clarify` — synchronous, returns questions immediately
+- Uses `claude-sonnet-4-6` with extended thinking (budget_tokens=5000)
+- Generates 3–5 dynamic multiple-choice questions tailored to the topic
+- Always includes format question (`id="format"`, options A/B/C)
+- On any failure → returns hardcoded Format B defaults (never blocks the user)
+- Web UI shows questions as pill-selectors; Hareen answers then hits Generate
+- Skip option uses all question defaults (Format B + broad angle)
+- Answers passed to research as `clarifier_answers` + `carousel_format`
+- File: `src/agents/topic_clarifier/agent.py`
+
+### PDF Guide Agent (v5 — shipped)
 - Triggered for `content_type="educational"` posts only
 - LLM generates structured guide content (intro + steps + tips) + DM keyword (uppercase, max 8 chars)
 - Renders branded A4 PDF using ReportLab (BytesIO — no /tmp writes) with UncoverAI design
@@ -62,14 +76,21 @@ The system has two entry points:
 - For educational posts: image query targets tool visuals (logo/screenshot), not news thumbnails
 - Generates carousel PNG slides locally using **Pillow** (no Canva)
 - Design system: "UncoverAI" — 1080×1350px, dark navy bg (#1A1A2E), neon periwinkle accent (#8075FF), Anton + Inter fonts
-- Slide structure (6–10+ slides):
-  - Slide 1 — Cover: story image + "DO YOU KNOW" pill + bold headline (word-level accent alternation)
-  - Slide 2 (news) — Hook Stat: large accent number + white context label (standalone — works without slide 1)
-  - Slide 2 (educational) — "WHAT YOU'LL LEARN": accent bg, step preview bullets (up to 4)
-  - Slide 3+ — Content: numbered stat bullets (accent numbers, white text), max 4 per slide, as many slides as needed
-  - Second-to-last slide — Read More: "LINK IN DESCRIPTION" (accent + white) — no URL on slide; URL in caption only
-  - Last slide — CTA: "SEND THIS TO SOMEONE" + "@TECHWITHHAREEN" in accent
-- LLM is prompted to generate 8–12 key_stats per story; renderer chunks them into content slides automatically
+- Slide structure varies by `carousel_format` (v5 Phase 2):
+  - Slide 1 — Cover: always the same (image + "DO YOU KNOW" pill + headline)
+  - Slide 2 (news) — Hook Stat: large accent number + white context label
+  - Slide 2 (Format A) — Accent bg: "MOST PEOPLE DO IT WRONG." — sets up mistake series
+  - Slide 2 (Format B) — Hook Stat reused: concept count as number, "KEY PRINCIPLES TO MASTER" label
+  - Slide 2 (Format C) — Accent bg: "CHEAT SHEET" + "Save this — you'll use it"
+  - Slide 2 (legacy educational, no format) — "WHAT YOU'LL LEARN" accent bg with step bullets
+  - Slides 3+ (Format A) — 1 mistake per slide: "MISTAKE #N" pill + wrong approach + divider + "✓ FIX:"
+  - Slides 3+ (Format B) — 1 concept per slide: "PRINCIPLE #N" pill + concept name + explanation
+  - Slides 3+ (Format C) — 3 tips per slide: accent numbers + white tip text (dense cheat-sheet layout)
+  - Mid-carousel — BOOKMARK THIS (Format A + B only; omitted for Format C)
+  - Second-to-last — "LINK IN DESCRIPTION"
+  - Last (Format A + B) — "SEND THIS TO SOMEONE" + "@TECHWITHHAREEN"
+  - Last (Format C) — "SAVE THIS CHEAT SHEET" + "@TECHWITHHAREEN"
+- `carousel_format` stored on Story + passed through to renderer + Firestore render_data
 - Slides saved as PNGs to `/tmp/carousel_{id}/`, uploaded to GCS
 - Returns `CarouselResult` with GCS `https://` URLs + `image_url` (for re-render)
 
@@ -168,35 +189,48 @@ Web UI approval queue
 [Publishing Module — manual]
 ```
 
-### v5 — Web UI Educational Content
+### v5 — Web UI Educational Content (Phase 2 redesign in progress)
 ```
 Web UI (topic input, content_type="educational")
             ↓
-POST /api/v2/research
+POST /api/v2/clarify  ← NEW (v5 Phase 2)
             ↓
-[ResearchOrchestrator.run_educational()]
+[TopicClarifierAgent] ← NEW
+  - claude-sonnet-4-6 with extended thinking
+  - Generates 3–5 topic-specific questions with options
+  - Always includes format question (A/B/C)
+            ↓
+Web UI shows clarifier questions → Hareen picks answers (or skips → Format B defaults)
+            ↓
+POST /api/v2/research (with carousel_format + clarifier_answers)
+            ↓
+[ResearchOrchestrator.run_educational(carousel_format, clarifier_answers)]
   - Exa+Tavily+Serper (tutorial/how-to queries)
-  - Returns exactly 1 Story with lesson steps in key_stats
+  - _synthesise_educational() prompt adapts per format (A/B/C)
+  - Format A key_stats: "MISTAKE: [text]\nFIX: [text]"
+  - Format B key_stats: "[Concept Name]\n[explanation]"
+  - Format C key_stats: single-line tips ≤80 chars
+  - Returns exactly 1 Story with story.carousel_format set
   - image_query targets tool visuals (logo, screenshot)
             ↓
 [ContentValidator SKIPPED]
             ↓
-[PostCreatorAgent] (content_type="educational")
-  - carousel with "WHAT YOU'LL LEARN" Slide 2
+[PostCreatorAgent] (content_type="educational", carousel_format=A/B/C)
+  - format-specific Slide 2 + content slides + CTA
             ↓
-[PDFGuideAgent] (NEW — runs before CaptionWriter)
+[PDFGuideAgent] (runs before CaptionWriter)
   - LLM generates guide content + dm_keyword
   - ReportLab PDF → GCS guides/{slug}.pdf
             ↓
 [CaptionWriterAgent] (educational voice + dm_keyword)
   - CTA: "DM me [KEYWORD] for the full guide 📩"
             ↓
-[PostAnalyzerAgent]
+[PostAnalyzerAgent] (Format C: accepts "SAVE THIS CHEAT SHEET" CTA)
             ↓
-Firestore /posts (pdf_url, dm_keyword, content_type)
+Firestore /posts (pdf_url, dm_keyword, content_type, carousel_format in doc + render_data)
             ↓
 Web UI approval queue
-  - Carousel preview + PDF preview link + DM keyword badge
+  - Carousel preview + PDF preview link + DM keyword badge + format badge (Mistakes/Pillars/Cheat Sheet)
 ```
 
 ## Infrastructure (GCP)
