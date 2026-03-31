@@ -42,6 +42,10 @@ class Story:
     # Phase 2 classifier will SET this field — it does not add it.
     content_type: Optional[str] = None
 
+    # Carousel format — set by TopicClarifierAgent for educational posts
+    # Values: "A" (Mistakes→Right Way) | "B" (Pillars) | "C" (Cheat Sheet) | None (legacy step-by-step)
+    carousel_format: Optional[str] = None
+
     def to_dict(self) -> dict:
         return {
             "headline": self.headline,
@@ -56,4 +60,5 @@ class Story:
             "validation_passed": self.validation_passed,
             "validation_notes": self.validation_notes,
             "content_type": self.content_type,
+            "carousel_format": self.carousel_format,
         }

@@ -107,6 +107,7 @@ async def create_carousel(
     hook_stat_label: str = "",
     source_url: str | None = None,
     content_type: str = "news",
+    carousel_format: Optional[str] = None,
 ) -> CarouselResult:
     """
     Create an Instagram carousel using the Pillow-based renderer,
@@ -119,8 +120,9 @@ async def create_carousel(
         hook_stat_value:  Big number for slide 2 (e.g. "70%").
         hook_stat_label:  Context label for slide 2.
         source_url:       Source article URL — adds a "Read More" slide if present.
-        content_type:     "news" (default) or "educational". When "educational",
-                          Slide 2 shows WHAT YOU'LL LEARN instead of the hook stat.
+        content_type:     "news" (default) or "educational".
+        carousel_format:  "A" (Mistakes), "B" (Pillars), "C" (Cheat Sheet), or None (legacy).
+                          Only used when content_type="educational".
 
     Returns:
         CarouselResult with public https:// export_urls (or file:// on GCS failure).
@@ -142,6 +144,7 @@ async def create_carousel(
             output_dir=output_dir,
             source_url=source_url,
             content_type=content_type,
+            carousel_format=carousel_format,
         )
 
         # Upload all slides to GCS in parallel

@@ -148,6 +148,7 @@ async def create_post(
     pdf_url: Optional[str] = None,
     dm_keyword: Optional[str] = None,
     content_type: Optional[str] = None,
+    carousel_format: Optional[str] = None,
 ) -> str:
     """
     Persist a completed post (slides + caption) to the approval queue.
@@ -173,6 +174,7 @@ async def create_post(
         "pdf_url": pdf_url,
         "dm_keyword": dm_keyword,
         "content_type": content_type,
+        "carousel_format": carousel_format,
         "created_at": firestore.SERVER_TIMESTAMP,
         "approved_at": None,
         "rejection_reason": None,

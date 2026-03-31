@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from src.agents.content_validator.validator import ContentValidator
 from src.agents.pdf_guide.agent import PDFGuideAgent
 from src.agents.research_orchestrator.orchestrator import ResearchError, ResearchOrchestrator
+from src.agents.topic_clarifier.agent import ClarifierQuestion, TopicClarifierAgent
 from src.orchestrator.handler import InstaHandlerManager, StoryResult
 from src.publishing.publisher import register_pending_post
 from src.utils import firestore_client as db
@@ -37,15 +38,22 @@ _research_orchestrator = ResearchOrchestrator()
 _content_validator = ContentValidator()
 _pipeline = InstaHandlerManager()
 _pdf_guide_agent = PDFGuideAgent()
+_topic_clarifier = TopicClarifierAgent()
 
 
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
 
+class ClarifyRequest(BaseModel):
+    topic: str
+
+
 class ResearchRequest(BaseModel):
     topic: str
     content_type: Literal["news", "educational"] = "news"
+    carousel_format: Optional[str] = None            # "A" | "B" | "C" — from clarifier answers
+    clarifier_answers: Optional[dict[str, str]] = None  # {question_id: option_value}
 
 
 class ApproveRequest(BaseModel):
@@ -74,8 +82,59 @@ class ReorderSlidesRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Clarifier helpers
+# ---------------------------------------------------------------------------
+
+def _default_clarifier_questions() -> list[dict]:
+    """
+    Hardcoded fallback returned when TopicClarifierAgent fails.
+    Always returns just the format question with Format B as default.
+    This ensures the pipeline can continue without blocking the user.
+    """
+    return [
+        {
+            "id": "format",
+            "text": "Which format fits this topic?",
+            "options": [
+                {"value": "A", "label": "Mistakes → Right Way — what most people get wrong + the fix"},
+                {"value": "B", "label": "Core Concepts / Pillars — 3–5 key ideas, each slide standalone"},
+                {"value": "C", "label": "Cheat Sheet — dense tips, optimized for saves"},
+            ],
+            "default": "B",
+        }
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Research
 # ---------------------------------------------------------------------------
+
+@router.post("/clarify")
+async def clarify_topic(body: ClarifyRequest):
+    """
+    Generate clarifying questions for an educational topic.
+    Returns questions immediately (synchronous — no background task).
+    On any failure, returns hardcoded Format B defaults — never 500s to the browser.
+    """
+    topic = body.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="topic must not be empty")
+    try:
+        from dataclasses import asdict
+        result = await _topic_clarifier.run(topic)
+        questions = []
+        for q in result.questions:
+            questions.append({
+                "id": q.id,
+                "text": q.text,
+                "options": [{"value": o.value, "label": o.label} for o in q.options],
+                "default": q.default,
+            })
+        return {"questions": questions}
+    except Exception as exc:
+        logger.warning("TopicClarifierAgent failed for topic '%s': %s — returning defaults", topic, exc)
+        return {"questions": _default_clarifier_questions()}
+
 
 @router.post("/research")
 async def start_research(body: ResearchRequest):
@@ -88,7 +147,12 @@ async def start_research(body: ResearchRequest):
         raise HTTPException(status_code=400, detail="topic must not be empty")
 
     job_id = await db.create_job(topic)
-    asyncio.create_task(_run_research_pipeline(job_id, topic, content_type=body.content_type))
+    asyncio.create_task(_run_research_pipeline(
+        job_id, topic,
+        content_type=body.content_type,
+        carousel_format=body.carousel_format,
+        clarifier_answers=body.clarifier_answers,
+    ))
 
     return JSONResponse({"job_id": job_id}, status_code=202)
 
@@ -214,6 +278,11 @@ async def update_slides(post_id: str, body: UpdateSlidesRequest):
     if post.get("status") != "pending":
         raise HTTPException(status_code=409, detail="Can only edit slides of a pending post")
 
+    # Recover carousel_format and content_type from existing render_data for re-render
+    existing_render_data = post.get("render_data") or {}
+    carousel_format = existing_render_data.get("carousel_format")
+    content_type = post.get("content_type") or "news"
+
     result = await create_carousel(
         headline=body.headline,
         key_stats=body.key_stats,
@@ -221,6 +290,8 @@ async def update_slides(post_id: str, body: UpdateSlidesRequest):
         hook_stat_value=body.hook_stat_value,
         hook_stat_label=body.hook_stat_label,
         source_url=body.source_url,
+        content_type=content_type,
+        carousel_format=carousel_format,
     )
 
     if not result.success:
@@ -233,6 +304,7 @@ async def update_slides(post_id: str, body: UpdateSlidesRequest):
         "hook_stat_label": body.hook_stat_label,
         "source_url": body.source_url,
         "image_url": body.image_url,
+        "carousel_format": carousel_format,  # preserve for future re-renders
     }
     await db.update_post_slides_and_render_data(post_id, result.export_urls, render_data)
     logger.info(f"Post {post_id} slides re-rendered ({result.slide_count} slides)")
@@ -292,13 +364,14 @@ async def _run_educational_story(job_id: str, story) -> StoryResult:
 
     Cannot use _pipeline._process_story() because that calls CaptionWriter internally
     without dm_keyword support — it is v1 infrastructure and must not be modified.
+
+    story.carousel_format is used by PostCreatorAgent and PostAnalyzerAgent.
     """
     import uuid
     story_id = str(uuid.uuid4())[:8]
     result = StoryResult(story_id=story_id, story=story)
     try:
-        # 1. Run carousel — pass content_type='educational' so WHAT YOU'LL LEARN
-        #    Slide 2 is rendered (EDU-03). Without this, carousel defaults to news mode.
+        # 1. Run carousel — pass content_type='educational' and carousel_format
         carousel = await _pipeline._post_creator.run(story, content_type='educational')
         result.carousel = carousel
 
@@ -335,7 +408,13 @@ async def _run_educational_story(job_id: str, story) -> StoryResult:
     return result
 
 
-async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "news") -> None:
+async def _run_research_pipeline(
+    job_id: str,
+    topic: str,
+    content_type: str = "news",
+    carousel_format: Optional[str] = None,
+    clarifier_answers: Optional[dict] = None,
+) -> None:
     """
     Background task that runs the full v2 pipeline for a research job:
       1. ResearchOrchestrator  — fetch + synthesise stories
@@ -347,13 +426,19 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
     content_type: "news" (default) | "educational"
       - "news": full pipeline including ContentValidator, 1–5 stories
       - "educational": ContentValidator skipped, hard-capped to 1 story, pdf_url/dm_keyword stubs
+    carousel_format: "A" | "B" | "C" — set by TopicClarifierAgent; passed to run_educational()
+    clarifier_answers: {question_id: option_value} — injected into synthesis prompt
     """
     try:
         # Step 1 — Research (always runs; educational path uses run_educational stub)
-        logger.info(f"[job {job_id}] Starting research for '{topic}' (type={content_type})")
+        logger.info(f"[job {job_id}] Starting research for '{topic}' (type={content_type}, format={carousel_format})")
         try:
             if content_type == "educational":
-                stories = await _research_orchestrator.run_educational(topic)
+                stories = await _research_orchestrator.run_educational(
+                    topic,
+                    carousel_format=carousel_format,
+                    clarifier_answers=clarifier_answers,
+                )
             else:
                 stories = await _research_orchestrator.run(topic)
         except ResearchError as e:
@@ -422,6 +507,7 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
                 "hook_stat_label": result.story.hook_stat_label,
                 "source_url": result.story.url,
                 "image_url": result.carousel.image_url if result.carousel else None,
+                "carousel_format": result.story.carousel_format,  # stored for re-render
             }
 
             # Educational-only fields — populated by _run_educational_story via story temp attrs
@@ -437,6 +523,7 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
                 pdf_url=pdf_url,
                 dm_keyword=dm_keyword,
                 content_type=content_type if content_type == "educational" else None,
+                carousel_format=result.story.carousel_format,
             )
             post_ids.append(post_id)
 

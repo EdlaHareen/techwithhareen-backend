@@ -600,6 +600,306 @@ def _slide_cta(total: int) -> Image.Image:
     return img
 
 
+# ── Format A: Mistakes → Right Way slides ─────────────────────────────────────
+
+def _slide_format_a_hook(slide_num: int, total: int) -> Image.Image:
+    """
+    Format A Slide 2 — accent bg with bold hook claim.
+    Sets up the mistake series: "MOST PEOPLE DO IT WRONG."
+    """
+    img = Image.new("RGB", (W, H), ACCENT)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+    f_big = _font("anton", 140)
+    f_sub = _font("inter_sb", 40)
+
+    lines = ["MOST PEOPLE", "DO IT", "WRONG."]
+    heights = [_text_block_height(l, f_big, max_w, 0) for l in lines]
+    sub_h = _line_height(f_sub)
+    gap = 20
+    block_h = sum(heights) + (len(heights) - 1) * gap + 48 + sub_h
+    y = (H - block_h) // 2
+
+    for i, line in enumerate(lines):
+        color = (0, 0, 0) if i < 2 else WHITE
+        _draw_text_block(draw, line, pad, y, f_big, color, max_w, spacing=0, align="center")
+        y += heights[i] + gap
+
+    y += 28
+    sub = "HERE'S WHAT ACTUALLY WORKS."
+    sw = int(draw.textlength(sub, font=f_sub))
+    draw.text(((W - sw) // 2, y), sub, font=f_sub, fill=WHITE)
+
+    return img
+
+
+def _slide_mistake(stat: str, slide_num: int, total: int) -> Image.Image:
+    """
+    Format A content slide — one mistake + fix per slide.
+    Parses stat as "MISTAKE: [text]\\nFIX: [text]".
+    Falls back to plain 2-line split if prefix not found.
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=80)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+
+    # Parse mistake / fix lines
+    parts = stat.split("\n", 1)
+    mistake_line = parts[0].strip()
+    fix_line = parts[1].strip() if len(parts) > 1 else ""
+
+    # Strip "MISTAKE: " and "FIX: " prefixes if present
+    if mistake_line.upper().startswith("MISTAKE:"):
+        mistake_line = mistake_line[len("MISTAKE:"):].strip()
+    if fix_line.upper().startswith("FIX:"):
+        fix_line = fix_line[len("FIX:"):].strip()
+
+    # Derive mistake number from slide position (slide 3 = mistake 1, etc.)
+    # We display the number from the slide counter context — use a pill label instead
+    # Extract the content slide index from slide_num: slide 3 = #1 for Format A
+    # For simplicity, we don't track index here — caller (render_carousel) numbers it.
+    # We display "MISTAKE #N" using a pill at the top.
+
+    f_pill = _font("inter_sb", 28)
+    f_mistake = _font("anton", 68)
+    f_fix_label = _font("inter_sb", 32)
+    f_fix = _font("inter", 34)
+
+    # Pill: "MISTAKE #N" — we need the content index. Use slide_num - 2 as proxy.
+    mistake_num = max(1, slide_num - 2)
+    pill_text = f"MISTAKE #{mistake_num}"
+    pill_lw = int(draw.textlength(pill_text, font=f_pill))
+    pill_lh = _line_height(f_pill)
+    pill_pad_x, pill_pad_y = 20, 10
+    pill_x = pad
+    pill_y = 100
+
+    draw.rounded_rectangle(
+        [pill_x, pill_y, pill_x + pill_lw + 2 * pill_pad_x, pill_y + pill_lh + 2 * pill_pad_y],
+        radius=20, fill=ACCENT,
+    )
+    draw.text((pill_x + pill_pad_x, pill_y + pill_pad_y), pill_text, font=f_pill, fill=WHITE)
+
+    # Mistake text — large Anton white
+    mistake_h = _text_block_height(mistake_line, f_mistake, max_w, spacing=4)
+    mistake_y = pill_y + pill_lh + 2 * pill_pad_y + 50
+
+    _draw_text_block(draw, mistake_line, pad, mistake_y, f_mistake, WHITE, max_w, spacing=4, align="left")
+
+    # Divider line
+    divider_y = mistake_y + mistake_h + 50
+    draw.line([(pad, divider_y), (W - pad, divider_y)], fill=ACCENT, width=2)
+
+    # Fix section
+    fix_label_y = divider_y + 30
+    check_str = "✓ FIX:"
+    draw.text((pad, fix_label_y), check_str, font=f_fix_label, fill=ACCENT)
+    check_w = int(draw.textlength(check_str, font=f_fix_label))
+
+    fix_x = pad + check_w + 12
+    fix_w = max_w - check_w - 12
+    fix_lines = _wrap(fix_line, f_fix, fix_w)
+    fix_lh = _line_height(f_fix)
+    fy = fix_label_y
+    for line in fix_lines:
+        draw.text((fix_x, fy), line, font=f_fix, fill=WHITE)
+        fy += fix_lh + 4
+
+    return img
+
+
+# ── Format B: Core Concepts / Pillars slides ───────────────────────────────────
+
+def _slide_pillar(stat: str, slide_num: int, total: int) -> Image.Image:
+    """
+    Format B content slide — one concept/pillar per slide.
+    Parses stat as "[Concept Name]\\n[2-sentence explanation]".
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=80)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+
+    parts = stat.split("\n", 1)
+    concept_name = parts[0].strip()
+    explanation = parts[1].strip() if len(parts) > 1 else ""
+
+    f_pill = _font("inter_sb", 28)
+    f_concept = _font("anton", 88)
+    f_explain = _font("inter", 34)
+
+    # Pill: "PRINCIPLE #N"
+    principle_num = max(1, slide_num - 2)
+    pill_text = f"PRINCIPLE #{principle_num}"
+    pill_lw = int(draw.textlength(pill_text, font=f_pill))
+    pill_lh = _line_height(f_pill)
+    pill_pad_x, pill_pad_y = 20, 10
+    pill_y = 100
+
+    draw.rounded_rectangle(
+        [pad, pill_y, pad + pill_lw + 2 * pill_pad_x, pill_y + pill_lh + 2 * pill_pad_y],
+        radius=20, fill=ACCENT,
+    )
+    draw.text((pad + pill_pad_x, pill_y + pill_pad_y), pill_text, font=f_pill, fill=WHITE)
+
+    # Concept name — large Anton white
+    concept_y = pill_y + pill_lh + 2 * pill_pad_y + 60
+    concept_h = _text_block_height(concept_name, f_concept, max_w, spacing=4)
+    _draw_text_block(draw, concept_name, pad, concept_y, f_concept, WHITE, max_w, spacing=4, align="left")
+
+    # Explanation — Inter gray
+    if explanation:
+        explain_y = concept_y + concept_h + 36
+        explain_lines = _wrap(explanation, f_explain, max_w)
+        explain_lh = _line_height(f_explain)
+        for line in explain_lines:
+            if explain_y + explain_lh > H - 80:
+                break
+            draw.text((pad, explain_y), line, font=f_explain, fill=GRAY)
+            explain_y += explain_lh + 6
+
+    return img
+
+
+# ── Format C: Cheat Sheet slides ───────────────────────────────────────────────
+
+def _slide_cheat_intro(slide_num: int, total: int) -> Image.Image:
+    """
+    Format C Slide 2 — accent bg with "CHEAT SHEET" + save prompt.
+    """
+    img = Image.new("RGB", (W, H), ACCENT)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+    f_big = _font("anton", 160)
+    f_sub = _font("inter_sb", 42)
+
+    h1 = _text_block_height("CHEAT", f_big, max_w, 0)
+    h2 = _text_block_height("SHEET", f_big, max_w, 0)
+    h_sub = _line_height(f_sub)
+    gap = 12
+    block_h = h1 + gap + h2 + 40 + h_sub
+    y = (H - block_h) // 2
+
+    _draw_text_block(draw, "CHEAT", pad, y, f_big, WHITE, max_w, spacing=0, align="center")
+    y += h1 + gap
+    _draw_text_block(draw, "SHEET", pad, y, f_big, (0, 0, 0), max_w, spacing=0, align="center")
+    y += h2 + 40
+
+    sub = "SAVE THIS — YOU'LL USE IT"
+    sw = int(draw.textlength(sub, font=f_sub))
+    draw.text(((W - sw) // 2, y), sub, font=f_sub, fill=WHITE)
+
+    return img
+
+
+def _slide_cheat_batch(stats_batch: list[str], slide_num: int, total: int) -> Image.Image:
+    """
+    Format C content slide — up to 3 tips stacked vertically.
+    Each tip is a single line (no \\n parsing needed).
+    Dense cheat-sheet layout with accent numbers + white tip text.
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=80)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, slide_num, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+
+    f_num = _font("anton", 72)
+    f_tip = _font("inter_sb", 36)
+
+    tips = stats_batch[:3]
+    n = len(tips)
+
+    top = 130
+    bottom = H - 80
+    available_h = bottom - top
+    slot_h = available_h // max(n, 1)
+
+    for i, tip in enumerate(tips):
+        num_str = f"{i + 1:02d}"
+        num_w = int(draw.textlength(num_str, font=f_num)) + 16
+        num_h = _line_height(f_num)
+        tip_x = pad + num_w
+        tip_w = max_w - num_w
+
+        tip_lines = _wrap(tip, f_tip, tip_w)
+        tip_lh = _line_height(f_tip)
+        tip_block_h = len(tip_lines) * (tip_lh + 4)
+        content_h = max(num_h, tip_block_h)
+
+        slot_top = top + i * slot_h
+        y = slot_top + (slot_h - content_h) // 2
+
+        # Accent number
+        draw.text((pad, y), num_str, font=f_num, fill=ACCENT)
+
+        # Tip text aligned with number top
+        ty = y + max(0, (num_h - tip_block_h) // 2)
+        for line in tip_lines:
+            draw.text((tip_x, ty), line, font=f_tip, fill=WHITE)
+            ty += tip_lh + 4
+
+        # Subtle divider between tips
+        if i < n - 1:
+            div_y = slot_top + slot_h - 1
+            draw.line([(pad, div_y), (W - pad, div_y)], fill=(80, 75, 180), width=1)
+
+    return img
+
+
+def _slide_cta_save(total: int) -> Image.Image:
+    """
+    Format C last slide — "SAVE THIS CHEAT SHEET" + "@TECHWITHHAREEN".
+    Replaces the standard "SEND THIS TO SOMEONE" CTA for cheat sheet format.
+    """
+    img = _black_canvas()
+    img = _vignette_edges(img, strength=100)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, total, total)
+
+    f_big = _font("anton", 104)
+    f_handle = _font("anton", 64)
+    pad = 44
+    max_w = W - 2 * pad
+
+    lines_big = ["SAVE THIS", "CHEAT SHEET"]
+    h_big = sum(_text_block_height(l, f_big, max_w, 0) for l in lines_big) + 10
+    h_handle = _text_block_height("@TECHWITHHAREEN", f_handle, max_w, 0)
+    gap = 32
+    total_h = h_big + gap + h_handle
+    y = (H - total_h) // 2
+
+    for line in lines_big:
+        _draw_text_block(draw, line, pad, y, f_big, WHITE, max_w, spacing=0, align="center")
+        y += _text_block_height(line, f_big, max_w, 0) + 10
+
+    y += gap - 10
+    _draw_text_block(draw, "@techwithhareen", pad, y, f_handle, ACCENT, max_w, spacing=0, align="center")
+
+    return img
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def render_carousel(
@@ -611,20 +911,22 @@ def render_carousel(
     output_dir: Optional[str] = None,
     source_url: str | None = None,
     content_type: str = "news",
+    carousel_format: Optional[str] = None,
 ) -> list[str]:
     """
     Render a 4+ slide carousel and save PNGs to output_dir (default: /tmp).
 
     Args:
         headline:          Hook headline for the cover slide.
-        stats:             Bullet-point stats for content slide(s). Max 4 per slide.
+        stats:             Bullet-point stats for content slide(s).
         image_bytes:       Optional raw bytes of a JPEG/PNG for the cover slide.
-        hook_stat_value:   Big number for slide 2 (e.g. "70%").
-        hook_stat_label:   Context for slide 2 (e.g. "OF SAMSUNG RAM GOES TO NVIDIA").
+        hook_stat_value:   Big number for slide 2 (e.g. "70%"). Used by Format B.
+        hook_stat_label:   Context for slide 2. Used by Format B.
         output_dir:        Directory to save PNGs. Defaults to /tmp.
         source_url:        Source article URL — adds a "Read More" slide if present.
-        content_type:      "news" (default) or "educational". When "educational",
-                           Slide 2 shows WHAT YOU'LL LEARN instead of the hook stat.
+        content_type:      "news" (default) or "educational".
+        carousel_format:   "A" (Mistakes), "B" (Pillars), "C" (Cheat Sheet), or None (legacy).
+                           Only applies when content_type="educational".
 
     Returns:
         List of absolute file paths to the generated PNGs.
@@ -632,41 +934,146 @@ def render_carousel(
     out = Path(output_dir or "/tmp")
     out.mkdir(parents=True, exist_ok=True)
 
-    # Split stats into content slides (max 4 per slide)
-    stat_chunks: list[list[str]] = []
-    for i in range(0, max(len(stats), 1), 4):
-        chunk = stats[i:i + 4]
-        if chunk:
-            stat_chunks.append(chunk)
-
     has_read_more = bool(source_url)
 
-    # Determine if a mid-carousel bookmark slide is needed
-    has_bookmark = len(stat_chunks) >= 2  # 8+ total slides means 2+ content slides
-    bookmark_after_chunk = len(stat_chunks) // 2  # insert after halfway content slide
+    if content_type == "educational" and carousel_format in ("A", "B", "C"):
+        # ── v5 Phase 2: multi-format educational path ──────────────────────────
+        if carousel_format == "C":
+            # Format C: 3 tips per slide, no bookmark, save CTA
+            batches: list[list[str]] = []
+            for i in range(0, max(len(stats), 1), 3):
+                batch = stats[i:i + 3]
+                if batch:
+                    batches.append(batch)
 
-    # Recalculate total including bookmark slide
-    total = 2 + len(stat_chunks) + (1 if has_bookmark else 0) + (1 if has_read_more else 0) + 1
+            has_bookmark = False
+            total = 2 + len(batches) + (1 if has_read_more else 0) + 1
 
-    if content_type == "educational":
-        slide_2 = _slide_learn_preview(stats[:4], total)
+            slide_2 = _slide_cheat_intro(2, total)
+            content_slides = [_slide_cheat_batch(b, 3 + i, total) for i, b in enumerate(batches)]
+            cta_slide = _slide_cta_save(total)
+
+        elif carousel_format == "A":
+            # Format A: 1 mistake per slide, bookmark, send CTA
+            content_slides_data = stats  # 1 stat per slide
+            has_bookmark = len(content_slides_data) >= 2
+            bookmark_after = len(content_slides_data) // 2
+
+            # Pre-compute total: cover + slide2 + n content + bookmark? + read_more? + cta
+            total = 2 + len(content_slides_data) + (1 if has_bookmark else 0) + (1 if has_read_more else 0) + 1
+
+            slide_2 = _slide_format_a_hook(2, total)
+
+            # Build content slides with correct slide numbers (accounting for bookmark insertion)
+            content_slides = []
+            bookmark_slide = None
+            slide_num = 3
+            for i, stat in enumerate(content_slides_data):
+                content_slides.append(_slide_mistake(stat, slide_num, total))
+                slide_num += 1
+                if has_bookmark and i == bookmark_after - 1:
+                    bookmark_slide = _slide_bookmark(slide_num, total)
+                    slide_num += 1
+
+            cta_slide = _slide_cta(total)
+
+        else:
+            # Format B (Pillars): 1 concept per slide, bookmark, send CTA
+            content_slides_data = stats
+            has_bookmark = len(content_slides_data) >= 2
+            bookmark_after = len(content_slides_data) // 2
+
+            total = 2 + len(content_slides_data) + (1 if has_bookmark else 0) + (1 if has_read_more else 0) + 1
+
+            slide_2 = _slide_hook_stat(hook_stat_value, hook_stat_label, total)
+
+            content_slides = []
+            bookmark_slide = None
+            slide_num = 3
+            for i, stat in enumerate(content_slides_data):
+                content_slides.append(_slide_pillar(stat, slide_num, total))
+                slide_num += 1
+                if has_bookmark and i == bookmark_after - 1:
+                    bookmark_slide = _slide_bookmark(slide_num, total)
+                    slide_num += 1
+
+            cta_slide = _slide_cta(total)
+
+        # Assemble slides list
+        slides: list[Image.Image] = [
+            _slide_cover(headline, image_bytes, total),
+            slide_2,
+        ]
+
+        if carousel_format == "C":
+            slides.extend(content_slides)
+        else:
+            # For A and B, interleave bookmark after halfway point
+            slide_num = 3
+            bookmark_after = len(stats) // 2
+            for i, s in enumerate(content_slides):
+                slides.append(s)
+                if has_bookmark and carousel_format != "C":
+                    # bookmark_slide was built during content slide loop above
+                    if bookmark_slide is not None and i == bookmark_after - 1:
+                        slides.append(bookmark_slide)
+                        bookmark_slide = None  # only insert once
+
+        if has_read_more:
+            slides.append(_slide_read_more(source_url, len(slides) + 1, total))
+        slides.append(cta_slide)
+
+    elif content_type == "educational":
+        # ── Legacy educational (no carousel_format): step-by-step ─────────────
+        stat_chunks: list[list[str]] = []
+        for i in range(0, max(len(stats), 1), 4):
+            chunk = stats[i:i + 4]
+            if chunk:
+                stat_chunks.append(chunk)
+
+        has_bookmark = len(stat_chunks) >= 2
+        bookmark_after_chunk = len(stat_chunks) // 2
+        total = 2 + len(stat_chunks) + (1 if has_bookmark else 0) + (1 if has_read_more else 0) + 1
+
+        slides = [
+            _slide_cover(headline, image_bytes, total),
+            _slide_learn_preview(stats[:4], total),
+        ]
+        start_num = 0
+        for idx, chunk in enumerate(stat_chunks):
+            slides.append(_slide_content(chunk, len(slides) + 1, total, start_num=start_num))
+            start_num += len(chunk)
+            if has_bookmark and idx == bookmark_after_chunk - 1:
+                slides.append(_slide_bookmark(len(slides) + 1, total))
+        if has_read_more:
+            slides.append(_slide_read_more(source_url, len(slides) + 1, total))
+        slides.append(_slide_cta(total))
+
     else:
-        slide_2 = _slide_hook_stat(hook_stat_value, hook_stat_label, total)
+        # ── News path — unchanged ──────────────────────────────────────────────
+        stat_chunks = []
+        for i in range(0, max(len(stats), 1), 4):
+            chunk = stats[i:i + 4]
+            if chunk:
+                stat_chunks.append(chunk)
 
-    slides: list[Image.Image] = [
-        _slide_cover(headline, image_bytes, total),
-        slide_2,
-    ]
-    start_num = 0
-    for idx, chunk in enumerate(stat_chunks):
-        slides.append(_slide_content(chunk, len(slides) + 1, total, start_num=start_num))
-        start_num += len(chunk)
-        # Insert bookmark slide after the halfway content slide
-        if has_bookmark and idx == bookmark_after_chunk - 1:
-            slides.append(_slide_bookmark(len(slides) + 1, total))
-    if has_read_more:
-        slides.append(_slide_read_more(source_url, len(slides) + 1, total))
-    slides.append(_slide_cta(total))
+        has_bookmark = len(stat_chunks) >= 2
+        bookmark_after_chunk = len(stat_chunks) // 2
+        total = 2 + len(stat_chunks) + (1 if has_bookmark else 0) + (1 if has_read_more else 0) + 1
+
+        slides = [
+            _slide_cover(headline, image_bytes, total),
+            _slide_hook_stat(hook_stat_value, hook_stat_label, total),
+        ]
+        start_num = 0
+        for idx, chunk in enumerate(stat_chunks):
+            slides.append(_slide_content(chunk, len(slides) + 1, total, start_num=start_num))
+            start_num += len(chunk)
+            if has_bookmark and idx == bookmark_after_chunk - 1:
+                slides.append(_slide_bookmark(len(slides) + 1, total))
+        if has_read_more:
+            slides.append(_slide_read_more(source_url, len(slides) + 1, total))
+        slides.append(_slide_cta(total))
 
     paths = []
     for i, slide in enumerate(slides, start=1):
@@ -675,5 +1082,5 @@ def render_carousel(
         slide.close()  # free pixel buffer immediately after saving
         paths.append(path)
 
-    logger.info(f"render_carousel: {len(paths)} slides for '{headline[:50]}'")
+    logger.info(f"render_carousel: {len(paths)} slides for '{headline[:50]}' (content_type={content_type}, format={carousel_format})")
     return paths

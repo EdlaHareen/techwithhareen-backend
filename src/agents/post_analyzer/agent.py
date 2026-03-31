@@ -57,7 +57,7 @@ class PostAnalyzerAgent:
             self._check_hook(story, caption),
             self._check_hashtags(caption),
             self._check_caption(caption),
-            self._check_cta(carousel, caption),
+            self._check_cta(carousel, caption, story=story),
             return_exceptions=True,
         )
 
@@ -172,17 +172,19 @@ Respond with JSON: {{"score": <1-10>, "issue": "<one sentence issue or null>"}}"
 
         return issues, fixes
 
-    async def _check_cta(self, carousel: CarouselResult, caption: Caption) -> tuple[list[str], list[str]]:
-        """Check that a CTA is present in both caption and last slide."""
+    async def _check_cta(self, carousel: CarouselResult, caption: Caption, story: Story = None) -> tuple[list[str], list[str]]:
+        """Check that a CTA is present in the caption. Format C accepts 'Save this' CTA."""
         issues = []
         fixes = []
 
         if not caption.cta or len(caption.cta.strip()) < 5:
-            issues.append("No CTA in caption")
-            fixes.append("Add CTA: 'Send this to someone who needs to see it 👇' (primary) or 'Save this post 🔖'")
-
-        # Note: Checking last slide CTA visually would require reading Canva slide content.
-        # The template's slide 4 has CTA by design — so if carousel was created from
-        # template, CTA slide exists. We trust the template structure here.
+            # Determine which CTA is expected based on carousel format
+            carousel_format = getattr(story, "carousel_format", None) if story else None
+            if carousel_format == "C":
+                issues.append("No CTA in caption")
+                fixes.append("Add CTA: 'Save this cheat sheet 🔖' or 'Save this post 🔖' — Format C is optimised for saves")
+            else:
+                issues.append("No CTA in caption")
+                fixes.append("Add CTA: 'Send this to someone who needs to see it 👇' (primary) or 'Save this post 🔖'")
 
         return issues, fixes
