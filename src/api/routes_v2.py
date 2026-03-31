@@ -23,8 +23,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.agents.content_validator.validator import ContentValidator
+from src.agents.pdf_guide.agent import PDFGuideAgent
 from src.agents.research_orchestrator.orchestrator import ResearchError, ResearchOrchestrator
-from src.orchestrator.handler import InstaHandlerManager
+from src.orchestrator.handler import InstaHandlerManager, StoryResult
 from src.publishing.publisher import register_pending_post
 from src.utils import firestore_client as db
 
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/api/v2")
 _research_orchestrator = ResearchOrchestrator()
 _content_validator = ContentValidator()
 _pipeline = InstaHandlerManager()
+_pdf_guide_agent = PDFGuideAgent()
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +284,57 @@ async def reorder_slides(post_id: str, body: ReorderSlidesRequest):
 # Background task — research → validate → pipeline → persist posts
 # ---------------------------------------------------------------------------
 
+async def _run_educational_story(job_id: str, story) -> StoryResult:
+    """
+    Per-story pipeline for educational posts.
+    Calls carousel, PDFGuide, CaptionWriter, and PostAnalyzer individually
+    so dm_keyword can be threaded through to CaptionWriter.
+
+    Cannot use _pipeline._process_story() because that calls CaptionWriter internally
+    without dm_keyword support — it is v1 infrastructure and must not be modified.
+    """
+    import uuid
+    story_id = str(uuid.uuid4())[:8]
+    result = StoryResult(story_id=story_id, story=story)
+    try:
+        # 1. Run carousel — pass content_type='educational' so WHAT YOU'LL LEARN
+        #    Slide 2 is rendered (EDU-03). Without this, carousel defaults to news mode.
+        carousel = await _pipeline._post_creator.run(story, content_type='educational')
+        result.carousel = carousel
+
+        # 2. Run PDFGuideAgent — produces pdf_url + dm_keyword
+        pdf_url: Optional[str] = None
+        dm_keyword: Optional[str] = None
+        try:
+            pdf_result = await _pdf_guide_agent.run(story)
+            pdf_url = pdf_result.pdf_url
+            dm_keyword = pdf_result.dm_keyword
+        except Exception as e:
+            logger.error(f"[job {job_id}] PDFGuideAgent failed: {e}")
+            # Non-fatal: proceed without PDF
+
+        # 3. CaptionWriter with dm_keyword injected
+        caption = await _pipeline._caption_writer.run(story, carousel, dm_keyword=dm_keyword)
+        result.caption = caption
+
+        # 4. PostAnalyzer
+        analysis = await _pipeline._post_analyzer.run(story, carousel, caption)
+        result.analysis = analysis
+        result.passed = analysis.passed
+        if not analysis.passed:
+            result.skip_reason = f"Failed analysis: {'; '.join(analysis.issues)}"
+
+        # Attach pdf_url and dm_keyword to story for Firestore persistence
+        story._edu_pdf_url = pdf_url
+        story._edu_dm_keyword = dm_keyword
+
+    except Exception as e:
+        logger.error(f"[job {job_id}] Educational pipeline exception: {e}", exc_info=True)
+        result.passed = False
+        result.skip_reason = str(e)
+    return result
+
+
 async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "news") -> None:
     """
     Background task that runs the full v2 pipeline for a research job:
@@ -332,15 +385,23 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
 
         logger.info(f"[job {job_id}] {len(passing_stories)} stories in pipeline")
 
-        # Step 3 — Run existing v1 pipeline per story in parallel
-        # NOTE: Plan 04 will split this block — the educational path will call
-        # _run_educational_story() instead of _process_story(). This step is
-        # superseded by Plan 04 for the educational branch only.
+        # Step 3 — Run pipeline per story
         await db.update_job_status(job_id, "analyzing")
-        pipeline_results = await asyncio.gather(
-            *[_pipeline._process_story(story) for story in passing_stories],
-            return_exceptions=True,
-        )
+
+        if content_type == "educational":
+            # Educational branch: call agents individually to allow dm_keyword injection.
+            # _process_story() runs CaptionWriter internally without dm_keyword support,
+            # so we cannot use it for educational posts.
+            pipeline_results = []
+            for story in passing_stories:
+                edu_result = await _run_educational_story(job_id, story)
+                pipeline_results.append(edu_result)
+        else:
+            # News branch: unchanged — use existing _process_story via asyncio.gather
+            pipeline_results = await asyncio.gather(
+                *[_pipeline._process_story(story) for story in passing_stories],
+                return_exceptions=True,
+            )
 
         # Step 4 — Persist passing posts to Firestore
         post_ids: list[str] = []
@@ -363,11 +424,9 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
                 "image_url": result.carousel.image_url if result.carousel else None,
             }
 
-            # Educational-only fields (stubs resolved by Plan 03 when PDFGuideAgent exists)
-            pdf_url: Optional[str] = None
-            dm_keyword: Optional[str] = None
-            # NOTE: PDFGuideAgent call will be added in Plan 03 after the agent exists.
-            # Wiring stub: pdf_url and dm_keyword remain None for now.
+            # Educational-only fields — populated by _run_educational_story via story temp attrs
+            pdf_url: Optional[str] = getattr(result.story, '_edu_pdf_url', None)
+            dm_keyword: Optional[str] = getattr(result.story, '_edu_dm_keyword', None)
 
             post_id = await db.create_post(
                 story=result.story,

@@ -14,6 +14,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from typing import Optional
 
 import anthropic
 
@@ -59,6 +60,13 @@ GENERAL NEWS / TREND (industry moves, layoffs, regulation, company strategy)
 → Conversational analyst. Give your honest read on what's actually happening beneath the headline.
 → Style: Rhetorical questions, a clear personal stance, no fence-sitting.
 → "What this really signals is..." or "Here's what most people are missing..."
+
+EDUCATIONAL (how-to guide, step-by-step tutorial, skill explainer)
+→ You're the teacher. Make it feel like a quick cheat code, not a lecture.
+→ Hook: Start with "Here's how to [do X] — the part most people skip." — concrete promise, no hype. ≤120 chars, complete sentence.
+→ Body: 3-4 sentences. Name 2-3 specific things they'll be able to do after this. Concrete and direct — not "you'll learn" but "you'll be able to".
+→ CTA: Exactly "DM me {dm_keyword} for the full guide 📩" where {dm_keyword} is the keyword placeholder. If no keyword, use "Save this for later 🔖".
+→ Hashtags: 3-5 skill/tool-focused tags (e.g. #ClaudeAI, #AIProductivity, #LearnAI, #AITools)
 
 Write the body as Hareen's take — the opinion IS the content. Do not separate summary from opinion."""
 
@@ -109,18 +117,26 @@ class CaptionWriterAgent:
     def __init__(self):
         self._client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-    async def run(self, story: Story, carousel: CarouselResult) -> Caption:
+    async def run(self, story: Story, carousel: CarouselResult, dm_keyword: Optional[str] = None) -> Caption:
         """
         Generate an Instagram caption.
 
         Args:
             story: The news story being captioned.
             carousel: The carousel created for this story (used for context).
+            dm_keyword: Optional DM keyword for educational posts. When provided (or when
+                story.content_type == "educational"), the educational voice mode is used
+                and the CTA becomes "DM me {dm_keyword} for the full guide 📩".
 
         Returns:
             Caption dataclass with all fields populated and validated.
         """
         logger.info(f"CaptionWriterAgent: writing caption for '{story.headline[:60]}'")
+
+        is_educational = (
+            dm_keyword is not None
+            or getattr(story, "content_type", None) == "educational"
+        )
 
         source_url_instruction = ""
         if story.url:
@@ -128,7 +144,45 @@ class CaptionWriterAgent:
                 f'\nAfter the CTA, include this exact line:\n"Link in Description 🔗\\n{story.url}"'
             )
 
-        user_content = f"""<story_data>
+        if is_educational:
+            if dm_keyword:
+                cta_instruction = (
+                    f"The DM keyword for this guide is '{dm_keyword}'. "
+                    f"The CTA must be exactly: DM me {dm_keyword} for the full guide 📩"
+                )
+            else:
+                cta_instruction = "No DM keyword available — use the save CTA: 'Save this for later 🔖'"
+
+            user_content = f"""<story_data>
+<headline>{story.headline[:200]}</headline>
+<summary>{story.summary[:600]}</summary>
+<key_stats>{json.dumps(story.key_stats)}</key_stats>
+</story_data>
+
+{_PERSONA_INSTRUCTION}
+
+This is an EDUCATIONAL post. Use the EDUCATIONAL voice mode described above.
+
+{cta_instruction}
+
+Return a JSON object with these exact fields:
+{{
+  "story_type": "educational",
+  "hook": "One concrete promise sentence using 'Here\\'s how to [do X] — the part most people skip.' format. No emoji. No hashtags. MUST be ≤120 characters and a grammatically complete sentence.",
+  "body": "3-4 sentences. Name 2-3 specific things they\\'ll be able to do after this. Concrete and direct — say \\"you\\'ll be able to\\" not \\"you\\'ll learn\\".",
+  "cta": "{dm_keyword + " for the full guide 📩" if dm_keyword else "Save this for later 🔖"}",
+  "hashtags": ["#techwithhareen", "#AITools", "#LearnAI"]  // exactly 3–5 skill/tool-focused tags
+}}{source_url_instruction}
+
+Hashtag rules (Instagram Dec 2025 algorithm):
+- Total: exactly 3–5 hashtags
+- REQUIRED: always include #techwithhareen (branded)
+- Include skill/tool-focused tags (e.g., #ClaudeAI, #AIProductivity, #LearnAI, #AITools)
+- Do NOT include more than 5 hashtags
+
+Return ONLY valid JSON."""
+        else:
+            user_content = f"""<story_data>
 <headline>{story.headline[:200]}</headline>
 <summary>{story.summary[:600]}</summary>
 <key_stats>{json.dumps(story.key_stats)}</key_stats>

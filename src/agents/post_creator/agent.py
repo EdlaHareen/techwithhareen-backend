@@ -21,12 +21,17 @@ logger = logging.getLogger(__name__)
 class PostCreatorAgent:
     """Creates a Canva carousel for a given story."""
 
-    async def run(self, story: Story) -> CarouselResult:
+    async def run(self, story: Story, content_type: str = "news") -> CarouselResult:
         """
         Create a carousel post for a story.
 
         Args:
             story: Structured story from ContentFetcherAgent.
+            content_type: "news" (default) or "educational". When "educational",
+                create_carousel() renders the WHAT YOU'LL LEARN Slide 2 (EDU-03)
+                instead of the hook stat slide. All existing callers (v1 pipeline via
+                InstaHandlerManager._process_story) use the default "news" and are
+                unaffected.
 
         Returns:
             CarouselResult with export URLs, or failed result if creation fails.
@@ -49,6 +54,7 @@ class PostCreatorAgent:
             hook_stat_value=story.hook_stat_value,
             hook_stat_label=story.hook_stat_label,
             source_url=story.url,
+            content_type=content_type,
         )
 
         if result.success:
