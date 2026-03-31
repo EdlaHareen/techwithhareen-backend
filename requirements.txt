@@ -7,6 +7,7 @@ anthropic==0.71.0
 
 # Image rendering
 Pillow>=11.0.0
+reportlab==4.4.10
 
 # Gmail + GCP
 google-api-python-client==2.189.0
