@@ -95,7 +95,7 @@ Plans:
 | 2. Content Classification | 0/? | Not started | - |
 | 3. Reels Script Agent | 0/? | Not started | - |
 | 4. Series + Stories | 0/? | Not started | - |
-| 5. Educational Content Pipeline | 4/4 | Complete | 2026-03-31 |
+| 5. Educational Content Pipeline | 4/4 | Complete    | 2026-03-31 |
 
 ---
 *Roadmap created: 2026-03-25 for v4.0 milestone*
