@@ -83,9 +83,9 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — Foundation: Story.content_type field, ResearchRequest.content_type, educational branch skeleton in _run_research_pipeline, create_post extended with pdf_url/dm_keyword/content_type
-- [ ] 05-02-PLAN.md — Research + Carousel: ResearchOrchestrator.run_educational() + _synthesise_educational(), carousel renderer WHAT YOU'LL LEARN Slide 2
-- [ ] 05-03-PLAN.md — PDF Guide Agent: new PDFGuideAgent with ReportLab canvas + GCS upload, reportlab added to requirements.txt
-- [ ] 05-04-PLAN.md — Caption + Web UI: CaptionWriter educational voice + dm_keyword, PDFGuideAgent wired in pipeline, frontend toggle/badge/PDF preview
+- [x] 05-02-PLAN.md — Research + Carousel: ResearchOrchestrator.run_educational() + _synthesise_educational(), carousel renderer WHAT YOU'LL LEARN Slide 2
+- [x] 05-03-PLAN.md — PDF Guide Agent: new PDFGuideAgent with ReportLab canvas + GCS upload, reportlab added to requirements.txt
+- [x] 05-04-PLAN.md — Caption + Web UI: CaptionWriter educational voice + dm_keyword, PDFGuideAgent wired in pipeline, frontend toggle/badge/PDF preview
 
 ## Progress
 
@@ -95,7 +95,7 @@ Plans:
 | 2. Content Classification | 0/? | Not started | - |
 | 3. Reels Script Agent | 0/? | Not started | - |
 | 4. Series + Stories | 0/? | Not started | - |
-| 5. Educational Content Pipeline | 3/4 | In Progress|  |
+| 5. Educational Content Pipeline | 4/4 | Complete | 2026-03-31 |
 
 ---
 *Roadmap created: 2026-03-25 for v4.0 milestone*

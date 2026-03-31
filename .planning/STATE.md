@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 5 of 5 (Educational Pipeline)
-Plan: 3 of 4 complete in current phase
-Status: In progress
-Last activity: 2026-03-31 — Plan 05-03 complete: PDFGuideAgent with ReportLab BytesIO PDF render + GCS upload; PDFGuideResult returns pdf_url and LLM-generated dm_keyword; reportlab==4.4.10 added
+Plan: 4 of 4 complete in current phase
+Status: Complete
+Last activity: 2026-03-31 — Plan 05-04 complete: PDFGuideAgent wired into educational pipeline; educational voice mode in CaptionWriter; content_type param on PostCreatorAgent; News/Educational toggle + DM badge + PDF link in web UI
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -59,6 +59,10 @@ Recent decisions affecting v4 work (full log in PROJECT.md):
 - [05-03] BytesIO buffer for PDF rendering — no /tmp writes, clean Cloud Run serverless compatibility
 - [05-03] Font registration at module load (_register_fonts() at import time) — avoids per-render TTF parsing; graceful Helvetica fallback
 - [05-03] dm_keyword normalized post-LLM-generation with .upper()[:8] to guard against non-compliant output
+- [05-04] Educational pipeline calls _run_educational_story (per-agent) not _process_story — dm_keyword cannot be injected through the monolithic v1 handler
+- [05-04] Story temp attrs (_edu_pdf_url/_edu_dm_keyword) bridge _run_educational_story result to Firestore persistence without modifying Story dataclass
+- [05-04] PDFGuideAgent failure is non-fatal in educational branch — CaptionWriter falls back to save CTA when dm_keyword is None
+- [05-04] ResearchForm.tsx did not exist — content_type toggle added to NewPost.tsx (the actual research form page)
 
 ### Pending Todos
 
@@ -71,5 +75,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-31
-Stopped at: Completed 05-educational-pipeline plan 05-02 (run_educational + _synthesise_educational in ResearchOrchestrator; _slide_learn_preview + content_type threading in carousel renderer and service)
+Stopped at: Completed 05-educational-pipeline plan 05-04 (PDFGuideAgent wired into _run_educational_story; educational voice mode in CaptionWriter; content_type param on PostCreatorAgent; News/Educational toggle + DM badge + PDF link in techwithhareen-web)
 Resume file: None
