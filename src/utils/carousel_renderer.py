@@ -504,6 +504,68 @@ def _slide_bookmark(slide_num: int, total: int) -> Image.Image:
     return img
 
 
+def _slide_learn_preview(steps_preview: list[str], total: int) -> Image.Image:
+    """
+    Slide 2 — What You'll Learn (educational carousels only).
+    Accent bg, "WHAT YOU'LL LEARN" header, 3-4 step bullet lines in white.
+    Replaces the hook stat slide when content_type='educational'.
+    """
+    img = Image.new("RGB", (W, H), ACCENT)
+    draw = ImageDraw.Draw(img)
+    _draw_brand(draw)
+    _draw_slide_counter(draw, 2, total)
+
+    pad = 44
+    max_w = W - 2 * pad
+
+    # Title: "WHAT YOU'LL LEARN"
+    title_f = _font("anton", 88)
+    title_h = _text_block_height("WHAT YOU'LL LEARN", title_f, max_w, spacing=0)
+
+    # Divider
+    divider_h = 4
+    divider_margin_top = 24
+    divider_margin_bottom = 40
+
+    # Measure bullets (first line of each step only)
+    bullet_f = _font("inter_sb", 36)
+    bullet_lh = _line_height(bullet_f)
+    bullet_spacing = 54
+    items = steps_preview[:4] if steps_preview else []
+    bullet_labels = []
+    for step in items:
+        first_line = step.split("\n")[0].strip()
+        bullet_labels.append(f"• {first_line}")
+
+    bullets_total_h = len(bullet_labels) * bullet_lh + max(0, len(bullet_labels) - 1) * (bullet_spacing - bullet_lh)
+
+    # Center the whole block vertically
+    block_h = title_h + divider_margin_top + divider_h + divider_margin_bottom + bullets_total_h
+    y = (H - block_h) // 2
+
+    # Draw title
+    _draw_text_block(draw, "WHAT YOU'LL LEARN", pad, y, title_f, WHITE, max_w, spacing=0, align="center")
+    y += title_h + divider_margin_top
+
+    # Draw divider
+    divider_alpha_color = (255, 255, 255, 100)  # white at ~40% opacity
+    divider_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    div_draw = ImageDraw.Draw(divider_img)
+    div_draw.line([(pad, y), (W - pad, y)], fill=divider_alpha_color, width=divider_h)
+    img_rgba = img.convert("RGBA")
+    img_rgba = Image.alpha_composite(img_rgba, divider_img)
+    img = img_rgba.convert("RGB")
+    draw = ImageDraw.Draw(img)
+    y += divider_h + divider_margin_bottom
+
+    # Draw bullet lines
+    for label in bullet_labels:
+        draw.text((pad, y), label, font=bullet_f, fill=WHITE)
+        y += bullet_spacing
+
+    return img
+
+
 def _slide_cta(total: int) -> Image.Image:
     """
     Slide 4 — CTA (evergreen).
@@ -548,6 +610,7 @@ def render_carousel(
     hook_stat_label: str = "",
     output_dir: Optional[str] = None,
     source_url: str | None = None,
+    content_type: str = "news",
 ) -> list[str]:
     """
     Render a 4+ slide carousel and save PNGs to output_dir (default: /tmp).
@@ -559,6 +622,9 @@ def render_carousel(
         hook_stat_value:   Big number for slide 2 (e.g. "70%").
         hook_stat_label:   Context for slide 2 (e.g. "OF SAMSUNG RAM GOES TO NVIDIA").
         output_dir:        Directory to save PNGs. Defaults to /tmp.
+        source_url:        Source article URL — adds a "Read More" slide if present.
+        content_type:      "news" (default) or "educational". When "educational",
+                           Slide 2 shows WHAT YOU'LL LEARN instead of the hook stat.
 
     Returns:
         List of absolute file paths to the generated PNGs.
@@ -582,9 +648,14 @@ def render_carousel(
     # Recalculate total including bookmark slide
     total = 2 + len(stat_chunks) + (1 if has_bookmark else 0) + (1 if has_read_more else 0) + 1
 
+    if content_type == "educational":
+        slide_2 = _slide_learn_preview(stats[:4], total)
+    else:
+        slide_2 = _slide_hook_stat(hook_stat_value, hook_stat_label, total)
+
     slides: list[Image.Image] = [
         _slide_cover(headline, image_bytes, total),
-        _slide_hook_stat(hook_stat_value, hook_stat_label, total),
+        slide_2,
     ]
     start_num = 0
     for idx, chunk in enumerate(stat_chunks):
