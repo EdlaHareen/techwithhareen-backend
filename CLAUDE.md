@@ -8,7 +8,7 @@ The system has two entry points:
 - **v1** — reads the daily rundownai newsletter from Gmail, creates carousel posts, writes captions, analyzes quality, and sends to the owner via Telegram for approval
 - **v2** — owner types any topic in a web UI, parallel research agents gather content, and the same pipeline produces posts for approval in the browser
 
-**Current version: v3 shipped. v4 planned (BRD + PRD written in docs/).**
+**Current version: v4 Phase 1 + v5 Phase 1 shipped.**
 
 ## Version History
 
@@ -17,7 +17,9 @@ The system has two entry points:
 | v1 | ✅ Live | Gmail newsletter → carousel → Telegram approval |
 | v2 | ✅ Live | Web UI topic research (Exa+Tavily+Serper) → carousel → web approval queue |
 | v3 | ✅ Live | Slide editor, personal-voice captions (Hareen's tone), Read More → "LINK IN DESCRIPTION" |
-| v4 | 🔲 Planned | Algorithm compliance fixes + Reels Script Agent + content classifier + recurring series + Stories pipeline |
+| v4 Phase 1 | ✅ Shipped | Algorithm compliance: 3–5 hashtags, #1A1A2E bg, BOOKMARK THIS mid-slide, SEND THIS TO SOMEONE CTA, 120-char hook, Slide 2 standalone stat |
+| v5 Phase 1 | ✅ Shipped | Educational content pipeline: "Educational" toggle in Web UI, lesson-step carousel, PDF Guide Agent (ReportLab + GCS), auto DM keyword, educational caption voice |
+| v4 Phases 2–4 | 🔲 Planned | Content classifier, Reels Script Agent, Series + Stories |
 
 ## Agent Architecture
 
@@ -48,13 +50,22 @@ The system has two entry points:
 - Deduplication — drops same-angle stories within a batch
 - Non-blocking: failing stories are logged, others continue
 
+### PDF Guide Agent (v5 — new)
+- Triggered for `content_type="educational"` posts only
+- LLM generates structured guide content (intro + steps + tips) + DM keyword (uppercase, max 8 chars)
+- Renders branded A4 PDF using ReportLab (BytesIO — no /tmp writes) with UncoverAI design
+- Uploads to GCS at `guides/{slug}.pdf`, returns public URL + dm_keyword
+- File: `src/agents/pdf_guide/agent.py`
+
 ### Post Creator Agent
 - Searches Serper.dev Google Images for a story-relevant image
+- For educational posts: image query targets tool visuals (logo/screenshot), not news thumbnails
 - Generates carousel PNG slides locally using **Pillow** (no Canva)
 - Design system: "UncoverAI" — 1080×1350px, dark navy bg (#1A1A2E), neon periwinkle accent (#8075FF), Anton + Inter fonts
 - Slide structure (6–10+ slides):
   - Slide 1 — Cover: story image + "DO YOU KNOW" pill + bold headline (word-level accent alternation)
-  - Slide 2 — Hook Stat: large accent number + white context label (standalone — works without slide 1)
+  - Slide 2 (news) — Hook Stat: large accent number + white context label (standalone — works without slide 1)
+  - Slide 2 (educational) — "WHAT YOU'LL LEARN": accent bg, step preview bullets (up to 4)
   - Slide 3+ — Content: numbered stat bullets (accent numbers, white text), max 4 per slide, as many slides as needed
   - Second-to-last slide — Read More: "LINK IN DESCRIPTION" (accent + white) — no URL on slide; URL in caption only
   - Last slide — CTA: "SEND THIS TO SOMEONE" + "@TECHWITHHAREEN" in accent
@@ -66,11 +77,13 @@ The system has two entry points:
 - Dedicated agent for Instagram captions
 - Uses `anthropic.AsyncAnthropic` (async client — not sync)
 - System/user prompt split for prompt injection hardening
-- **Hareen's voice** — 4 story type modes with distinct tone:
+- Accepts optional `dm_keyword` param — injected into CTA for educational posts
+- **Hareen's voice** — 5 story type modes with distinct tone:
   - `tool_feature` → Translator ("Okay this one's actually useful...")
   - `funding_acquisition` → Contrarian ("Let's be real — $X doesn't mean...")
   - `research_finding` → Accessible + actionable ("This one's worth your time...")
   - `general_news` → Conversational analyst ("What this really signals is...")
+  - `educational` → Teacher ("Here's how to [X] — the part most people skip...") + CTA: "DM me [KEYWORD] for the full guide 📩"
 - Output format:
   ```
   [Hook line — Hareen's direct take, ≤120 chars, complete sentence]
@@ -129,9 +142,9 @@ Gmail Pub/Sub (rundownai arrives)
 [Publishing Module — manual]
 ```
 
-### v2 — Web UI Topic Research
+### v2 — Web UI Topic Research (News)
 ```
-Web UI (topic input)
+Web UI (topic input, content_type="news")
             ↓
 POST /api/v2/research
             ↓
@@ -153,6 +166,37 @@ Web UI approval queue
  - Optional: also send to Telegram
             ↓
 [Publishing Module — manual]
+```
+
+### v5 — Web UI Educational Content
+```
+Web UI (topic input, content_type="educational")
+            ↓
+POST /api/v2/research
+            ↓
+[ResearchOrchestrator.run_educational()]
+  - Exa+Tavily+Serper (tutorial/how-to queries)
+  - Returns exactly 1 Story with lesson steps in key_stats
+  - image_query targets tool visuals (logo, screenshot)
+            ↓
+[ContentValidator SKIPPED]
+            ↓
+[PostCreatorAgent] (content_type="educational")
+  - carousel with "WHAT YOU'LL LEARN" Slide 2
+            ↓
+[PDFGuideAgent] (NEW — runs before CaptionWriter)
+  - LLM generates guide content + dm_keyword
+  - ReportLab PDF → GCS guides/{slug}.pdf
+            ↓
+[CaptionWriterAgent] (educational voice + dm_keyword)
+  - CTA: "DM me [KEYWORD] for the full guide 📩"
+            ↓
+[PostAnalyzerAgent]
+            ↓
+Firestore /posts (pdf_url, dm_keyword, content_type)
+            ↓
+Web UI approval queue
+  - Carousel preview + PDF preview link + DM keyword badge
 ```
 
 ## Infrastructure (GCP)
@@ -227,6 +271,7 @@ src/
     content_validator/      — relevance/freshness/dedup checks (v2)
     post_creator/           — Pillow carousel generator + image fetcher
     caption_writer/         — Instagram caption LLM agent (Hareen's voice, 4 story types)
+    pdf_guide/              — PDFGuideAgent: ReportLab PDF + GCS upload + DM keyword gen (v5)
     post_analyzer/          — 5-check quality gate with auto-retry
     telegram_bot/           — aiogram bot, approval flow
   orchestrator/
