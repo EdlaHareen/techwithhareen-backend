@@ -190,3 +190,154 @@ Return a JSON array of story objects. Return ONLY valid JSON, no explanation."""
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"ResearchOrchestrator: LLM synthesis failed: {e}")
             return []
+
+    async def run_educational(self, topic: str) -> list[Story]:
+        """
+        Research a topic and return exactly 1 Story formatted as a step-by-step
+        educational guide (content_type='educational').
+
+        The Story's key_stats contain 5-7 lesson steps formatted as:
+            "STEP N: VERB\nExplanation sentence."
+
+        Args:
+            topic: Topic string entered by the owner in the Web UI.
+
+        Returns:
+            List containing exactly 1 Story with content_type='educational'.
+
+        Raises:
+            ResearchError: If all three agents return no results or synthesis fails.
+        """
+        logger.info(f"ResearchOrchestrator: starting educational research for '{topic}'")
+
+        # Run all three agents in parallel — same as run()
+        exa_results, tavily_results, serper_results = await asyncio.gather(
+            self._exa.run(topic),
+            self._tavily.run(topic),
+            self._serper.run(topic),
+            return_exceptions=True,
+        )
+
+        all_results: list[RawResult] = []
+        agents_failed = 0
+
+        for label, outcome in [("Exa", exa_results), ("Tavily", tavily_results), ("Serper", serper_results)]:
+            if isinstance(outcome, Exception):
+                logger.error(f"ResearchOrchestrator: {label} agent raised exception: {outcome}")
+                agents_failed += 1
+            elif not outcome:
+                logger.warning(f"ResearchOrchestrator: {label} returned no results")
+                agents_failed += 1
+            else:
+                all_results.extend(outcome)
+
+        if agents_failed == 3:
+            raise ResearchError(f"All research agents failed for topic: '{topic}'")
+
+        if agents_failed > 0:
+            logger.warning(f"ResearchOrchestrator: {agents_failed}/3 agents failed — continuing with {len(all_results)} results")
+
+        # Deduplicate by URL
+        seen_urls: set[str] = set()
+        unique_results: list[RawResult] = []
+        for r in all_results:
+            if r.url not in seen_urls:
+                seen_urls.add(r.url)
+                unique_results.append(r)
+
+        logger.info(f"ResearchOrchestrator: {len(unique_results)} unique results after dedup (from {len(all_results)} total)")
+
+        # Synthesise into 1 educational Story
+        story = await self._synthesise_educational(topic, unique_results)
+        story.content_type = "educational"
+        story.source = story.source or "exa"
+        logger.info(f"ResearchOrchestrator: synthesised educational story for '{topic}'")
+        return [story]
+
+    async def _synthesise_educational(self, topic: str, results: list[RawResult]) -> Story:
+        """
+        Use Claude to synthesise raw research results into a single educational Story.
+
+        The Story contains 5-7 lesson steps in key_stats formatted as:
+            "STEP N: VERB\nExplanation sentence."
+
+        hook_stat_value and hook_stat_label are always empty strings —
+        educational carousels skip the hook stat slide.
+
+        Raises:
+            ResearchError: If the LLM returns malformed JSON.
+        """
+        results_text = "\n\n".join(
+            f"[{i+1}] SOURCE: {r.source_agent.upper()}\n"
+            f"Title: {r.title}\n"
+            f"URL: {r.url}\n"
+            f"Date: {r.published_date or 'unknown'}\n"
+            f"Content: {r.body[:800]}"
+            for i, r in enumerate(results[:15])
+        )
+
+        prompt = f"""You are a content strategist for @techwithhareen — an Instagram page about Tech, AI, and Startups.
+
+The owner wants to create a step-by-step educational guide carousel about: "{topic}"
+
+Below are raw research results. Your job is to synthesise a single educational Instagram carousel post.
+
+RAW RESEARCH RESULTS:
+{results_text}
+
+Return exactly 1 story object as valid JSON with these fields:
+
+- headline: Reframe the topic as a direct instruction or how-to headline in ALL CAPS. Max 12 words. Example: for "how to use Claude for work" → "HOW TO USE CLAUDE FOR WORK (AND ACTUALLY GET RESULTS)"
+- summary: 1-2 sentences that frame the value of the guide. Example: "Here's the step-by-step process most people skip when they first try [topic]." Keep it conversational and direct.
+- key_stats: a list of exactly 5-7 lesson steps. Each step MUST use this exact format: "STEP N: VERB\nOne sentence explanation." — for example: "STEP 1: OPEN A NEW CONVERSATION\nStart with a clear task description and give Claude the role it should play." The verb phrase after the colon must be ALL CAPS. The explanation on the second line is a complete sentence.
+- hook_stat_value: always return empty string ""
+- hook_stat_label: always return empty string ""
+- image_query: a 3-5 word query for a logo, screenshot, or interface visual — NOT a news article image. For example: "Claude AI interface screenshot", "OpenAI ChatGPT dashboard screenshot", "Notion app interface". The query must target tool visuals or product UI, not news thumbnails or stock photos.
+- url: the best source URL from the research results
+- source: which agent provided the most useful content ("exa", "tavily", or "serper")
+
+Rules:
+- key_stats must have exactly 5-7 items — no more, no less
+- Every step must start with "STEP N: " where N is the step number
+- hook_stat_value and hook_stat_label MUST be empty strings — do not put any value here
+- Do not invent facts not supported by the source material
+- Return ONLY valid JSON — no explanation, no markdown fences"""
+
+        try:
+            response = self._llm.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2048,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = response.content[0].text.strip()
+
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+
+            item = json.loads(raw)
+            headline = item.get("headline", "").strip()
+            summary = item.get("summary", "").strip()
+            if not headline or not summary:
+                raise ResearchError("Educational synthesis failed: missing headline or summary in LLM response")
+
+            return Story(
+                headline=headline,
+                summary=summary,
+                url=item.get("url"),
+                key_stats=item.get("key_stats", []),
+                hook_stat_value="",
+                hook_stat_label="",
+                image_query=item.get("image_query", f"{topic} interface screenshot"),
+                source=item.get("source", "exa"),
+                topic=topic,
+            )
+
+        except json.JSONDecodeError as e:
+            raise ResearchError(f"Educational synthesis failed: malformed JSON from LLM — {e}")
+        except ResearchError:
+            raise
+        except Exception as e:
+            raise ResearchError(f"Educational synthesis failed: {e}")
