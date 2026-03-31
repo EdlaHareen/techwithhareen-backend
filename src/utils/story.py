@@ -37,6 +37,11 @@ class Story:
     validation_passed: Optional[bool] = None
     validation_notes: str = ""
 
+    # Content classification (set by ContentClassifier on v2 path; canonical field for Phase 2)
+    # Values: "news" | "educational" | "news_and_announcements" | "tool_and_product" | None
+    # Phase 2 classifier will SET this field — it does not add it.
+    content_type: Optional[str] = None
+
     def to_dict(self) -> dict:
         return {
             "headline": self.headline,
@@ -50,4 +55,5 @@ class Story:
             "image_query": self.image_query,
             "validation_passed": self.validation_passed,
             "validation_notes": self.validation_notes,
+            "content_type": self.content_type,
         }

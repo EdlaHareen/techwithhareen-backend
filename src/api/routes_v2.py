@@ -43,6 +43,7 @@ _pipeline = InstaHandlerManager()
 
 class ResearchRequest(BaseModel):
     topic: str
+    content_type: Literal["news", "educational"] = "news"
 
 
 class ApproveRequest(BaseModel):
@@ -85,7 +86,7 @@ async def start_research(body: ResearchRequest):
         raise HTTPException(status_code=400, detail="topic must not be empty")
 
     job_id = await db.create_job(topic)
-    asyncio.create_task(_run_research_pipeline(job_id, topic))
+    asyncio.create_task(_run_research_pipeline(job_id, topic, content_type=body.content_type))
 
     return JSONResponse({"job_id": job_id}, status_code=202)
 
@@ -281,14 +282,18 @@ async def reorder_slides(post_id: str, body: ReorderSlidesRequest):
 # Background task — research → validate → pipeline → persist posts
 # ---------------------------------------------------------------------------
 
-async def _run_research_pipeline(job_id: str, topic: str) -> None:
+async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "news") -> None:
     """
     Background task that runs the full v2 pipeline for a research job:
       1. ResearchOrchestrator  — fetch + synthesise stories
-      2. ContentValidator      — relevance, freshness, dedup
+      2. ContentValidator      — relevance, freshness, dedup (news only; skipped for educational)
       3. Per story (parallel): existing v1 pipeline (PostCreator → Caption → Analyzer)
       4. Persist each passing post to Firestore /posts collection
       5. Update job status throughout
+
+    content_type: "news" (default) | "educational"
+      - "news": full pipeline including ContentValidator, 1–5 stories
+      - "educational": ContentValidator skipped, hard-capped to 1 story, pdf_url/dm_keyword stubs
     """
     try:
         # Step 1 — Research
