@@ -82,7 +82,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Foundation: Story.content_type field, ResearchRequest.content_type, educational branch skeleton in _run_research_pipeline, create_post extended with pdf_url/dm_keyword/content_type
+- [x] 05-01-PLAN.md — Foundation: Story.content_type field, ResearchRequest.content_type, educational branch skeleton in _run_research_pipeline, create_post extended with pdf_url/dm_keyword/content_type
 - [ ] 05-02-PLAN.md — Research + Carousel: ResearchOrchestrator.run_educational() + _synthesise_educational(), carousel renderer WHAT YOU'LL LEARN Slide 2
 - [ ] 05-03-PLAN.md — PDF Guide Agent: new PDFGuideAgent with ReportLab canvas + GCS upload, reportlab added to requirements.txt
 - [ ] 05-04-PLAN.md — Caption + Web UI: CaptionWriter educational voice + dm_keyword, PDFGuideAgent wired in pipeline, frontend toggle/badge/PDF preview

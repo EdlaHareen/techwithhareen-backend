@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Every approved post sounds like Hareen — opinionated, direct, signal-not-noise — with zero extra effort beyond the approval click.
-**Current focus:** Phase 1 — Algorithm Compliance
+**Current focus:** Phase 5 — Educational Pipeline
 
 ## Current Position
 
-Phase: 1 of 4 (Algorithm Compliance)
-Plan: 2 of ? in current phase
+Phase: 5 of 5 (Educational Pipeline)
+Plan: 1 of 4 complete in current phase
 Status: In progress
-Last activity: 2026-03-26 — Plan 01-02 complete: caption writer and post analyzer updated for Instagram Dec 2025 algorithm (3-5 hashtags, 120-char hook, DM-share primary CTA)
+Last activity: 2026-03-31 — Plan 05-01 complete: content_type added to Story dataclass, ResearchRequest, educational branch skeleton in _run_research_pipeline, create_post extended with pdf_url/dm_keyword/content_type
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -48,6 +48,10 @@ Recent decisions affecting v4 work (full log in PROJECT.md):
 - [01-02] Niche-hashtag-by-character-length heuristic removed — unreliable at 3-5 tags; LLM prompt handles niche selection at generation time
 - [01-02] DM-share CTA is primary for news/tool stories; save CTA reserved for research/general_news
 - [01-02] _FALLBACK_HASHTAGS (3 tags) replaces BASE_HASHTAGS (7 tags) — within the new cap
+- [05-01] Story.content_type uses Optional[str] not Literal — keeps internal model extensible for Phase 2 classifier value expansion
+- [05-01] ResearchRequest.content_type uses Literal["news","educational"] — strict API boundary; internal Story stays flexible
+- [05-01] create_post stores content_type=None for news posts, "educational" for educational — avoids polluting existing news Firestore docs
+- [05-01] Educational branch calls run_educational stub that raises AttributeError until Plan 02 — acceptable; news path unaffected
 
 ### Pending Todos
 
@@ -59,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26
-Stopped at: Completed 01-algorithm-compliance plan 01-02 (caption writer + post analyzer compliance fixes)
+Last session: 2026-03-31
+Stopped at: Completed 05-educational-pipeline plan 05-01 (content_type data model foundation — Story, ResearchRequest, educational branch skeleton, create_post extended)
 Resume file: None
