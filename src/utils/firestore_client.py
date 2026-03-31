@@ -145,12 +145,19 @@ async def create_post(
     caption: str,
     source: Literal["newsletter", "web_ui"],
     render_data: Optional[dict] = None,
+    pdf_url: Optional[str] = None,
+    dm_keyword: Optional[str] = None,
+    content_type: Optional[str] = None,
 ) -> str:
     """
     Persist a completed post (slides + caption) to the approval queue.
 
     render_data stores the carousel render params (headline, key_stats, image_url, etc.)
     so slides can be re-rendered after inline edits.
+
+    pdf_url: GCS URL to the PDF guide (educational posts only; None for news posts).
+    dm_keyword: DM trigger keyword for PDF delivery (educational posts only; None for news posts).
+    content_type: "educational" for educational posts; None for standard news posts.
 
     Returns the Firestore document ID (post_id).
     """
@@ -163,6 +170,9 @@ async def create_post(
         "source": source,
         "telegram_sent": False,
         "render_data": render_data or {},
+        "pdf_url": pdf_url,
+        "dm_keyword": dm_keyword,
+        "content_type": content_type,
         "created_at": firestore.SERVER_TIMESTAMP,
         "approved_at": None,
         "rejection_reason": None,

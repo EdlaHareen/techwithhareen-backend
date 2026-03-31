@@ -296,10 +296,13 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
       - "educational": ContentValidator skipped, hard-capped to 1 story, pdf_url/dm_keyword stubs
     """
     try:
-        # Step 1 — Research
-        logger.info(f"[job {job_id}] Starting research for '{topic}'")
+        # Step 1 — Research (always runs; educational path uses run_educational stub)
+        logger.info(f"[job {job_id}] Starting research for '{topic}' (type={content_type})")
         try:
-            stories = await _research_orchestrator.run(topic)
+            if content_type == "educational":
+                stories = await _research_orchestrator.run_educational(topic)
+            else:
+                stories = await _research_orchestrator.run(topic)
         except ResearchError as e:
             logger.error(f"[job {job_id}] Research failed: {e}")
             await db.update_job_status(job_id, "failed")
@@ -310,19 +313,29 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
             await db.update_job_status(job_id, "failed")
             return
 
-        # Step 2 — Validate
+        # Step 2 — Validate (news only) or pass through (educational)
         await db.update_job_status(job_id, "creating")
-        validation_results = await _content_validator.run(topic, stories)
-        passing_stories = [r.story for r in validation_results if r.passed]
+        if content_type == "news":
+            validation_results = await _content_validator.run(topic, stories)
+            passing_stories = [r.story for r in validation_results if r.passed]
 
-        if not passing_stories:
-            logger.warning(f"[job {job_id}] All stories failed validation — marking failed")
-            await db.update_job_status(job_id, "failed")
-            return
+            if not passing_stories:
+                logger.warning(f"[job {job_id}] All stories failed validation — marking failed")
+                await db.update_job_status(job_id, "failed")
+                return
 
-        logger.info(f"[job {job_id}] {len(passing_stories)} stories passed validation")
+            logger.info(f"[job {job_id}] {len(passing_stories)} stories passed validation")
+        else:
+            # Educational: skip ContentValidator entirely — 1 pre-authored topic story
+            passing_stories = stories[:1]  # hard-cap: exactly 1 educational story
+            logger.info(f"[job {job_id}] Educational path — ContentValidator skipped, {len(passing_stories)} story in pipeline")
+
+        logger.info(f"[job {job_id}] {len(passing_stories)} stories in pipeline")
 
         # Step 3 — Run existing v1 pipeline per story in parallel
+        # NOTE: Plan 04 will split this block — the educational path will call
+        # _run_educational_story() instead of _process_story(). This step is
+        # superseded by Plan 04 for the educational branch only.
         await db.update_job_status(job_id, "analyzing")
         pipeline_results = await asyncio.gather(
             *[_pipeline._process_story(story) for story in passing_stories],
@@ -350,12 +363,21 @@ async def _run_research_pipeline(job_id: str, topic: str, content_type: str = "n
                 "image_url": result.carousel.image_url if result.carousel else None,
             }
 
+            # Educational-only fields (stubs resolved by Plan 03 when PDFGuideAgent exists)
+            pdf_url: Optional[str] = None
+            dm_keyword: Optional[str] = None
+            # NOTE: PDFGuideAgent call will be added in Plan 03 after the agent exists.
+            # Wiring stub: pdf_url and dm_keyword remain None for now.
+
             post_id = await db.create_post(
                 story=result.story,
                 slides=slide_urls,
                 caption=caption_text,
                 source="web_ui",
                 render_data=render_data,
+                pdf_url=pdf_url,
+                dm_keyword=dm_keyword,
+                content_type=content_type if content_type == "educational" else None,
             )
             post_ids.append(post_id)
 
