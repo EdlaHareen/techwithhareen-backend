@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-25)
 ## Current Position
 
 Phase: 5 of 5 (Educational Pipeline)
-Plan: 1 of 4 complete in current phase
+Plan: 3 of 4 complete in current phase
 Status: In progress
-Last activity: 2026-03-31 — Plan 05-01 complete: content_type added to Story dataclass, ResearchRequest, educational branch skeleton in _run_research_pipeline, create_post extended with pdf_url/dm_keyword/content_type
+Last activity: 2026-03-31 — Plan 05-03 complete: PDFGuideAgent with ReportLab BytesIO PDF render + GCS upload; PDFGuideResult returns pdf_url and LLM-generated dm_keyword; reportlab==4.4.10 added
 
-Progress: [████████░░] 75%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -52,6 +52,9 @@ Recent decisions affecting v4 work (full log in PROJECT.md):
 - [05-01] ResearchRequest.content_type uses Literal["news","educational"] — strict API boundary; internal Story stays flexible
 - [05-01] create_post stores content_type=None for news posts, "educational" for educational — avoids polluting existing news Firestore docs
 - [05-01] Educational branch calls run_educational stub that raises AttributeError until Plan 02 — acceptable; news path unaffected
+- [05-03] BytesIO buffer for PDF rendering — no /tmp writes, clean Cloud Run serverless compatibility
+- [05-03] Font registration at module load (_register_fonts() at import time) — avoids per-render TTF parsing; graceful Helvetica fallback
+- [05-03] dm_keyword normalized post-LLM-generation with .upper()[:8] to guard against non-compliant output
 
 ### Pending Todos
 
@@ -64,5 +67,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-31
-Stopped at: Completed 05-educational-pipeline plan 05-01 (content_type data model foundation — Story, ResearchRequest, educational branch skeleton, create_post extended)
+Stopped at: Completed 05-educational-pipeline plan 05-03 (PDFGuideAgent — ReportLab BytesIO PDF render, LLM-generated dm_keyword, GCS upload to guides/{slug}.pdf)
 Resume file: None
