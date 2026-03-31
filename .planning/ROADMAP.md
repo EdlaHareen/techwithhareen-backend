@@ -69,6 +69,24 @@ Plans:
   4. A "Generate Story Card" button exists on each PostCard; clicking it produces a 1080×1920px teaser card with the hook stat in large Anton type and the `#8075FF` accent background, downloadable from the web UI
 **Plans**: TBD
 
+### Phase 5: Educational Content Pipeline
+**Goal**: When Hareen types a learning topic and selects "Educational" in the Web UI, the pipeline produces a step-by-step carousel plus a branded PDF mini-guide — uploaded to GCS and previewed for approval — with an auto-generated DM keyword woven through the caption CTA.
+**Depends on**: Phase 2 (Content Classification — CLASS-01 through CLASS-03 must be complete so `content_type` field exists on Story)
+**Requirements**: EDU-01, EDU-02, EDU-03, EDU-04, EDU-05, EDU-06, EDU-07, EDU-08, EDU-09, EDU-10
+**Success Criteria** (what must be TRUE):
+  1. Selecting "Educational" in the Web UI and entering "How to use Claude for work" produces a carousel with a "WHAT YOU'LL LEARN" Slide 2 and lesson-step slides (not news stat bullets)
+  2. A PDF mini-guide is generated and its GCS URL is visible as a clickable link in the approval queue
+  3. The auto-generated DM keyword appears in both the caption CTA and a badge on the PostCard
+  4. ContentValidator is not invoked for educational content — pipeline skips directly to PostCreatorAgent
+  5. Approving an educational post stores `pdf_url`, `dm_keyword`, and `content_type: "educational"` in Firestore
+**Plans**: 4 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Foundation: Story.content_type field, ResearchRequest.content_type, educational branch skeleton in _run_research_pipeline, create_post extended with pdf_url/dm_keyword/content_type
+- [ ] 05-02-PLAN.md — Research + Carousel: ResearchOrchestrator.run_educational() + _synthesise_educational(), carousel renderer WHAT YOU'LL LEARN Slide 2
+- [ ] 05-03-PLAN.md — PDF Guide Agent: new PDFGuideAgent with ReportLab canvas + GCS upload, reportlab added to requirements.txt
+- [ ] 05-04-PLAN.md — Caption + Web UI: CaptionWriter educational voice + dm_keyword, PDFGuideAgent wired in pipeline, frontend toggle/badge/PDF preview
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -77,7 +95,9 @@ Plans:
 | 2. Content Classification | 0/? | Not started | - |
 | 3. Reels Script Agent | 0/? | Not started | - |
 | 4. Series + Stories | 0/? | Not started | - |
+| 5. Educational Content Pipeline | 0/4 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-25 for v4.0 milestone*
 *Phase 1 plans written: 2026-03-25*
+*Phase 5 plans written: 2026-03-30*
