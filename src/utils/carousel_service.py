@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 import httpx
 
 from src.utils.carousel_renderer import render_carousel
+from src.utils.educational_renderer import render_educational_carousel
 from src.utils.carousel_result import CarouselResult
 
 logger = logging.getLogger(__name__)
@@ -135,17 +136,29 @@ async def create_carousel(
         if image_url:
             image_bytes = await _fetch_image_bytes(image_url)
 
-        paths = render_carousel(
-            headline=headline,
-            stats=key_stats,
-            image_bytes=image_bytes,
-            hook_stat_value=hook_stat_value,
-            hook_stat_label=hook_stat_label,
-            output_dir=output_dir,
-            source_url=source_url,
-            content_type=content_type,
-            carousel_format=carousel_format,
-        )
+        if content_type == "educational":
+            paths = render_educational_carousel(
+                headline=headline,
+                stats=key_stats,
+                image_bytes=image_bytes,
+                hook_stat_value=hook_stat_value,
+                hook_stat_label=hook_stat_label,
+                output_dir=output_dir,
+                source_url=source_url,
+                carousel_format=carousel_format,
+            )
+        else:
+            paths = render_carousel(
+                headline=headline,
+                stats=key_stats,
+                image_bytes=image_bytes,
+                hook_stat_value=hook_stat_value,
+                hook_stat_label=hook_stat_label,
+                output_dir=output_dir,
+                source_url=source_url,
+                content_type=content_type,
+                carousel_format=carousel_format,
+            )
 
         # Upload all slides to GCS in parallel
         upload_tasks = [

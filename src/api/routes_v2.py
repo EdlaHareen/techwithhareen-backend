@@ -356,7 +356,7 @@ async def reorder_slides(post_id: str, body: ReorderSlidesRequest):
 # Background task — research → validate → pipeline → persist posts
 # ---------------------------------------------------------------------------
 
-async def _run_educational_story(job_id: str, story) -> StoryResult:
+async def _run_educational_pipeline(job_id: str, story) -> StoryResult:
     """
     Per-story pipeline for educational posts.
     Calls carousel, PDFGuide, CaptionWriter, and PostAnalyzer individually
@@ -479,7 +479,7 @@ async def _run_research_pipeline(
             # so we cannot use it for educational posts.
             pipeline_results = []
             for story in passing_stories:
-                edu_result = await _run_educational_story(job_id, story)
+                edu_result = await _run_educational_pipeline(job_id, story)
                 pipeline_results.append(edu_result)
         else:
             # News branch: unchanged — use existing _process_story via asyncio.gather
