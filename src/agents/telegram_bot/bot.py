@@ -28,14 +28,16 @@ logger = logging.getLogger(__name__)
 
 # Bot and dispatcher — initialized at module level for reuse across requests
 _bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-_redis_host = os.environ.get("REDIS_HOST", "127.0.0.1")
-_redis_port = int(os.environ.get("REDIS_PORT", "6379"))
+_redis_url = (
+    os.environ.get("REDIS_URL")
+    or f"redis://{os.environ.get('REDIS_HOST', '127.0.0.1')}:{os.environ.get('REDIS_PORT', '6379')}"
+)
 _owner_chat_id = os.environ.get("TELEGRAM_OWNER_CHAT_ID", "")
 _webhook_secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 
 bot = Bot(token=_bot_token)
 
-storage = RedisStorage.from_url(f"redis://{_redis_host}:{_redis_port}")
+storage = RedisStorage.from_url(_redis_url)
 dp = Dispatcher(storage=storage)
 router = Router()
 dp.include_router(router)
