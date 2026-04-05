@@ -59,6 +59,16 @@ Generate 9-12 actionable tips — the best shortcuts, tricks, and rules for this
 hook_stat_value: return empty string "".
 hook_stat_label: return empty string "".
 image_query: target the tool logo or interface screenshot — NOT a news thumbnail.""",
+
+    "listicle": """Format: LISTICLE (one tool/product per slide)
+Each key_stat MUST follow this exact format (four lines, separated by \\n):
+"[Tool/Product Name]\\n[Category — 1-2 words, e.g. GitOps, MLOps, AI Agent]\\n[One-liner value prop — what it does in 1 sentence, max 100 chars]\\n[Bullet 1]|||[Bullet 2]|||[Bullet 3]"
+Example: "ArgoCD\\nGitOps\\nAutomatically deploys your code from Git to Kubernetes\\nGuides & tutorials for CI/CD|||Integrates with Helm & Crossplane|||Best practices for prod deployments"
+Generate 5-8 tools/products. Each MUST be a REAL, existing tool — do NOT hallucinate or invent tools.
+The 3 bullets should highlight specific features, integrations, or use cases — not generic descriptions.
+hook_stat_value: the total tool count as a string (e.g. "5" or "8").
+hook_stat_label: a personalised list title in ALL CAPS, e.g. "TOOLS I ACTUALLY USE" or "REPOS WORTH BOOKMARKING" or "TOOLS EVERY DEV NEEDS". Make it feel like a personal recommendation.
+image_query: target the first tool's logo — e.g. "ArgoCD logo png".""",
 }
 
 

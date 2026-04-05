@@ -1,7 +1,7 @@
 ---
 title: "feat: Educational Carousel Redesign — Topic Clarifier + Multi-Format"
 type: feat
-status: active
+status: completed
 date: 2026-03-31
 brainstorm: docs/brainstorms/2026-03-31-educational-redesign-brainstorm.md
 ---

@@ -56,6 +56,7 @@ class PostCreatorAgent:
             source_url=story.url,
             content_type=content_type,
             carousel_format=story.carousel_format,
+            template_id=story.template_id,
         )
 
         if result.success:

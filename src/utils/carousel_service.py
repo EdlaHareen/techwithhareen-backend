@@ -87,6 +87,28 @@ async def _fetch_image_bytes(url: str) -> Optional[bytes]:
         return None
 
 
+async def _fetch_tool_logos(stats: list[str]) -> dict[str, Optional[bytes]]:
+    """Fetch logos for each tool in a listicle via image search."""
+    from src.agents.post_creator.image_fetcher import search_image
+
+    logos: dict[str, Optional[bytes]] = {}
+    for stat in stats:
+        tool_name = stat.split("\n")[0].strip() if "\n" in stat else stat.strip()
+        if tool_name in logos:
+            continue
+        try:
+            query = f"{tool_name} logo transparent png"
+            img_url = await search_image(query)
+            if img_url:
+                logos[tool_name] = await _fetch_image_bytes(img_url)
+            else:
+                logos[tool_name] = None
+        except Exception as e:
+            logger.warning(f"Logo fetch failed for '{tool_name}': {e}")
+            logos[tool_name] = None
+    return logos
+
+
 def _upload_sync(local_path: str, gcs_object_name: str) -> str:
     """Synchronous GCS upload (called via asyncio.to_thread)."""
     try:
@@ -109,6 +131,7 @@ async def create_carousel(
     source_url: str | None = None,
     content_type: str = "news",
     carousel_format: Optional[str] = None,
+    template_id: str = "dark_tech",
 ) -> CarouselResult:
     """
     Create an Instagram carousel using the Pillow-based renderer,
@@ -123,7 +146,7 @@ async def create_carousel(
         source_url:       Source article URL — adds a "Read More" slide if present.
         content_type:     "news" (default) or "educational".
         carousel_format:  "A" (Mistakes), "B" (Pillars), "C" (Cheat Sheet), or None (legacy).
-                          Only used when content_type="educational".
+        template_id:      Visual theme — "dark_tech" or "clean_light".
 
     Returns:
         CarouselResult with public https:// export_urls (or file:// on GCS failure).
@@ -136,7 +159,12 @@ async def create_carousel(
         if image_url:
             image_bytes = await _fetch_image_bytes(image_url)
 
-        if content_type == "educational":
+        # Listicle format: fetch logos for each tool, then route to educational renderer
+        tool_logos: Optional[dict[str, Optional[bytes]]] = None
+        if carousel_format == "listicle":
+            tool_logos = await _fetch_tool_logos(key_stats)
+
+        if content_type == "educational" or carousel_format == "listicle":
             paths = render_educational_carousel(
                 headline=headline,
                 stats=key_stats,
@@ -146,6 +174,8 @@ async def create_carousel(
                 output_dir=output_dir,
                 source_url=source_url,
                 carousel_format=carousel_format,
+                template_id=template_id,
+                tool_logos=tool_logos,
             )
         else:
             paths = render_carousel(
@@ -158,6 +188,7 @@ async def create_carousel(
                 source_url=source_url,
                 content_type=content_type,
                 carousel_format=carousel_format,
+                template_id=template_id,
             )
 
         # Upload all slides to GCS in parallel

@@ -52,8 +52,14 @@ class ClarifyRequest(BaseModel):
 class ResearchRequest(BaseModel):
     topic: str
     content_type: Literal["news", "educational"] = "news"
-    carousel_format: Optional[str] = None            # "A" | "B" | "C" — from clarifier answers
+    carousel_format: Optional[str] = None            # "A" | "B" | "C" | "listicle" — from clarifier
     clarifier_answers: Optional[dict[str, str]] = None  # {question_id: option_value}
+    template_id: str = "dark_tech"                   # "dark_tech" | "clean_light"
+
+
+class PreferencesRequest(BaseModel):
+    default_template: Optional[str] = None
+    default_format: Optional[str] = None
 
 
 class ApproveRequest(BaseModel):
@@ -152,6 +158,7 @@ async def start_research(body: ResearchRequest):
         content_type=body.content_type,
         carousel_format=body.carousel_format,
         clarifier_answers=body.clarifier_answers,
+        template_id=body.template_id,
     ))
 
     return JSONResponse({"job_id": job_id}, status_code=202)
@@ -278,9 +285,10 @@ async def update_slides(post_id: str, body: UpdateSlidesRequest):
     if post.get("status") != "pending":
         raise HTTPException(status_code=409, detail="Can only edit slides of a pending post")
 
-    # Recover carousel_format and content_type from existing render_data for re-render
+    # Recover carousel_format, template_id, and content_type from existing render_data
     existing_render_data = post.get("render_data") or {}
     carousel_format = existing_render_data.get("carousel_format")
+    template_id = existing_render_data.get("template_id", "dark_tech")
     content_type = post.get("content_type") or "news"
 
     result = await create_carousel(
@@ -292,6 +300,7 @@ async def update_slides(post_id: str, body: UpdateSlidesRequest):
         source_url=body.source_url,
         content_type=content_type,
         carousel_format=carousel_format,
+        template_id=template_id,
     )
 
     if not result.success:
@@ -304,7 +313,8 @@ async def update_slides(post_id: str, body: UpdateSlidesRequest):
         "hook_stat_label": body.hook_stat_label,
         "source_url": body.source_url,
         "image_url": body.image_url,
-        "carousel_format": carousel_format,  # preserve for future re-renders
+        "carousel_format": carousel_format,
+        "template_id": template_id,
     }
     await db.update_post_slides_and_render_data(post_id, result.export_urls, render_data)
     logger.info(f"Post {post_id} slides re-rendered ({result.slide_count} slides)")
@@ -350,6 +360,32 @@ async def reorder_slides(post_id: str, body: ReorderSlidesRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
     return JSONResponse({"slides": updated_slides})
+
+
+# ---------------------------------------------------------------------------
+# User preferences
+# ---------------------------------------------------------------------------
+
+@router.get("/preferences")
+async def get_preferences():
+    """Fetch user's default template + format preferences and available templates."""
+    from src.utils.carousel_templates import TEMPLATES
+    prefs = await db.get_user_preferences()
+    return {
+        "preferences": prefs,
+        "available_templates": list(TEMPLATES.keys()),
+        "available_formats": ["news", "A", "B", "C", "listicle"],
+    }
+
+
+@router.patch("/preferences")
+async def update_preferences(body: PreferencesRequest):
+    """Update user's default template and/or format preferences."""
+    await db.update_user_preferences(
+        default_template=body.default_template,
+        default_format=body.default_format,
+    )
+    return JSONResponse({"status": "updated"})
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +450,7 @@ async def _run_research_pipeline(
     content_type: str = "news",
     carousel_format: Optional[str] = None,
     clarifier_answers: Optional[dict] = None,
+    template_id: str = "dark_tech",
 ) -> None:
     """
     Background task that runs the full v2 pipeline for a research job:
@@ -433,7 +470,7 @@ async def _run_research_pipeline(
         # Step 1 — Research (always runs; educational path uses run_educational stub)
         logger.info(f"[job {job_id}] Starting research for '{topic}' (type={content_type}, format={carousel_format})")
         try:
-            if content_type == "educational":
+            if content_type == "educational" or carousel_format == "listicle":
                 stories = await _research_orchestrator.run_educational(
                     topic,
                     carousel_format=carousel_format,
@@ -453,7 +490,7 @@ async def _run_research_pipeline(
 
         # Step 2 — Validate (news only) or pass through (educational)
         await db.update_job_status(job_id, "creating")
-        if content_type == "news":
+        if content_type == "news" and carousel_format != "listicle":
             validation_results = await _content_validator.run(topic, stories)
             passing_stories = [r.story for r in validation_results if r.passed]
 
@@ -467,6 +504,10 @@ async def _run_research_pipeline(
             # Educational: skip ContentValidator entirely — 1 pre-authored topic story
             passing_stories = stories[:1]  # hard-cap: exactly 1 educational story
             logger.info(f"[job {job_id}] Educational path — ContentValidator skipped, {len(passing_stories)} story in pipeline")
+
+        # Set template_id on all stories
+        for story in passing_stories:
+            story.template_id = template_id
 
         logger.info(f"[job {job_id}] {len(passing_stories)} stories in pipeline")
 
@@ -507,7 +548,8 @@ async def _run_research_pipeline(
                 "hook_stat_label": result.story.hook_stat_label,
                 "source_url": result.story.url,
                 "image_url": result.carousel.image_url if result.carousel else None,
-                "carousel_format": result.story.carousel_format,  # stored for re-render
+                "carousel_format": result.story.carousel_format,
+                "template_id": result.story.template_id,
             }
 
             # Educational-only fields — populated by _run_educational_story via story temp attrs
@@ -524,6 +566,7 @@ async def _run_research_pipeline(
                 dm_keyword=dm_keyword,
                 content_type=content_type if content_type == "educational" else None,
                 carousel_format=result.story.carousel_format,
+                template_id=result.story.template_id,
             )
             post_ids.append(post_id)
 

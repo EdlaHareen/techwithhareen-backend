@@ -43,8 +43,11 @@ class Story:
     content_type: Optional[str] = None
 
     # Carousel format — set by TopicClarifierAgent for educational posts
-    # Values: "A" (Mistakes→Right Way) | "B" (Pillars) | "C" (Cheat Sheet) | None (legacy step-by-step)
+    # Values: "A" (Mistakes→Right Way) | "B" (Pillars) | "C" (Cheat Sheet) | "listicle" | None (legacy)
     carousel_format: Optional[str] = None
+
+    # Visual template — "dark_tech" (default) or "clean_light"
+    template_id: str = "dark_tech"
 
     def to_dict(self) -> dict:
         return {
@@ -61,4 +64,5 @@ class Story:
             "validation_notes": self.validation_notes,
             "content_type": self.content_type,
             "carousel_format": self.carousel_format,
+            "template_id": self.template_id,
         }

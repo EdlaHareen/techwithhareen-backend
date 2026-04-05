@@ -24,6 +24,7 @@ GMAIL_STATE_DOC = "gmail_state/cursor"
 FAILED_JOBS_COLLECTION = "failed_jobs"
 JOBS_COLLECTION = "jobs"
 POSTS_COLLECTION = "posts"
+PREFERENCES_COLLECTION = "user_preferences"
 
 JobStatus = Literal["researching", "creating", "analyzing", "ready", "failed"]
 PostStatus = Literal["pending", "approved", "rejected"]
@@ -149,6 +150,7 @@ async def create_post(
     dm_keyword: Optional[str] = None,
     content_type: Optional[str] = None,
     carousel_format: Optional[str] = None,
+    template_id: str = "dark_tech",
 ) -> str:
     """
     Persist a completed post (slides + caption) to the approval queue.
@@ -175,6 +177,7 @@ async def create_post(
         "dm_keyword": dm_keyword,
         "content_type": content_type,
         "carousel_format": carousel_format,
+        "template_id": template_id,
         "created_at": firestore.SERVER_TIMESTAMP,
         "approved_at": None,
         "rejection_reason": None,
@@ -302,3 +305,32 @@ async def reorder_post_slides(post_id: str, new_order: list[int]) -> list[str]:
     await client.collection(POSTS_COLLECTION).document(post_id).update({"slides": reordered})
     logger.info(f"Post {post_id} slides reordered")
     return reordered
+
+
+# ── User Preferences ──────────────────────────────────────────────────────────
+
+async def get_user_preferences(user_id: str = "default") -> dict:
+    """Fetch user's default template + format preferences."""
+    client = _get_client()
+    doc = await client.collection(PREFERENCES_COLLECTION).document(user_id).get()
+    if doc.exists:
+        return doc.to_dict()
+    return {"default_template": "dark_tech", "default_format": "news"}
+
+
+async def update_user_preferences(
+    user_id: str = "default",
+    default_template: Optional[str] = None,
+    default_format: Optional[str] = None,
+) -> None:
+    """Update user's default template and/or format preferences."""
+    client = _get_client()
+    updates: dict = {"updated_at": firestore.SERVER_TIMESTAMP}
+    if default_template is not None:
+        updates["default_template"] = default_template
+    if default_format is not None:
+        updates["default_format"] = default_format
+    await client.collection(PREFERENCES_COLLECTION).document(user_id).set(
+        updates, merge=True,
+    )
+    logger.info(f"User preferences updated: {updates}")
